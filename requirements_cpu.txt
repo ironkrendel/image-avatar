@@ -1,0 +1,6 @@
+onnxruntime
+opencv-python
+pillow
+numpy
+scikit-learn
+pandas

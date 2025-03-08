@@ -1,0 +1,10 @@
+--extra-index-url https://download.pytorch.org/whl/cu126
+torch
+torchvision
+torchaudio
+onnxruntime-gpu
+opencv-python
+pillow
+numpy
+scikit-learn
+pandas
