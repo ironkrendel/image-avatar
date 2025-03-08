@@ -53,7 +53,7 @@ print("Works!")
 
 def dist(p1: list, p2: list) -> float:
     if len(p1) != len(p2):
-        raise Exception("Coordinate count of point 1 does not match coordinate count of point 2!")
+        raise Exception("Dimensions of point 1 does not match dimensions of point 2!")
     result = 0
     for i in range(len(p1)):
         result += (p2[i] - p1[i])**2
@@ -74,27 +74,35 @@ allowed_extensions = ['.json']
 image_folder = './Images/Frames/'
 folder_contents = [f for f in os.listdir(image_folder) if os.path.isfile(os.path.join(image_folder, f)) and os.path.splitext(os.path.join(image_folder, f))[1] in allowed_extensions]
 
-for f in folder_contents:
+print("Loading data...")
+for i, f in enumerate(folder_contents):
+    if i % 100 == 0:
+        print(f"\r{i/len(folder_contents) * 100:.2f}%", end="")
     with open(image_folder + f, 'r') as cin:
         img_data = json.loads(cin.read())
-    print(img_data)
+    # print(img_data)
     images_filenames.append(img_data['crop'])
     images_parameters.append(img_data['parameters'])
+print(f"\rLoaded {len(images_parameters)} records")
 
+print("Initializing video capture...")
 input_reader = InputReader(
     capture=0, width=640, height=460, fps=30, raw_rgb=False, dcap=9, use_dshowcapture=True
 )
 
 ret, frame = input_reader.read()
+print("Capture initialized")
 
 height = frame.shape[0]
 width = frame.shape[1]
 
+print("Creating face tracker...")
 tracker = Tracker(
     width, height, max_threads=multiprocessing.cpu_count(), model_type=3, max_faces=1
 )
 
 faces = tracker.predict(frame)
+print("Face tracker created")
 
 while True:
     ret, frame = input_reader.read()
@@ -145,7 +153,7 @@ while True:
                 cv2.circle(frame, (y, x), 1, color, -1)
 
         # params = [dist(f.pts_3d[50], f.pts_3d[55]), dist(f.pts_3d[62], f.pts_3d[58]), *f.quaternion]
-        params = np.array([dist(f.pts_3d[50], f.pts_3d[55]), dist(f.pts_3d[62], f.pts_3d[58]), *f.euler])
+        params = [dist(f.pts_3d[50], f.pts_3d[55]) * 10, dist(f.pts_3d[62], f.pts_3d[58]) * 10, *f.euler]
         # params = [float(dist(f.pts_3d[50], f.pts_3d[55])), float(dist(f.pts_3d[62], f.pts_3d[58])), f.euler[0] * 10, f.euler[1] * 10, f.euler[2] * 10]
         # params = [dist(f.pts_3d[50], f.pts_3d[55]), dist(f.pts_3d[62], f.pts_3d[58])]
         # rot = f.quaternion
@@ -153,13 +161,13 @@ while True:
         # print(params)
 
         start_time = time.perf_counter()
-        errors = np.array([])
-        # errors = []
+        # errors = np.array([])
+        errors = []
         for img_params in images_parameters:
-            errors = np.append(errors, dist(params, img_params))
-            # errors.append(dist(params, img_params))
-        # min_index = min(range(len(errors)), key=errors.__getitem__)
-        min_index = np.argmin(errors)
+            # errors = np.append(errors, dist(params, img_params))
+            errors.append(dist(params, img_params))
+        min_index = min(range(len(errors)), key=errors.__getitem__)
+        # min_index = np.argmin(errors)
         # print(images_parameters[min_index])
         # print(dist(params, images_parameters[min_index]))
         print(f"{1000 * (time.perf_counter() - start_time):.2f}ms")
