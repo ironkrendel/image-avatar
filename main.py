@@ -5,6 +5,7 @@ import cv2
 import json
 import os
 import multiprocessing
+import matplotlib.pyplot as plt
 from input_reader import InputReader, VideoReader, DShowCaptureReader, try_int
 from tracker import Tracker, get_model_base_path
 
@@ -75,7 +76,7 @@ image_folder = './Images/Frames/'
 folder_contents = [f for f in os.listdir(image_folder) if os.path.isfile(os.path.join(image_folder, f)) and os.path.splitext(os.path.join(image_folder, f))[1] in allowed_extensions]
 
 print("Loading data...")
-for i, f in enumerate(folder_contents):
+for i, f in enumerate(folder_contents[1000:10000]):
     if i % 100 == 0:
         print(f"\r{i/len(folder_contents) * 100:.2f}%", end="")
     with open(image_folder + f, 'r') as cin:
@@ -84,6 +85,12 @@ for i, f in enumerate(folder_contents):
     images_filenames.append(img_data['crop'])
     images_parameters.append(img_data['parameters'])
 print(f"\rLoaded {len(images_parameters)} records")
+
+X = np.array(images_parameters)[:,2]
+Y = np.array(images_parameters)[:,10]
+
+plt.scatter(X, Y)
+plt.show()
 
 print("Initializing video capture...")
 input_reader = InputReader(
@@ -103,6 +110,11 @@ tracker = Tracker(
 
 faces = tracker.predict(frame)
 print("Face tracker created")
+
+indexes_set = set()
+
+min_vals = [100000000 for _ in range(10000)]
+max_vals = [-100000000 for _ in range(10000)]
 
 while True:
     ret, frame = input_reader.read()
@@ -153,12 +165,29 @@ while True:
                 cv2.circle(frame, (y, x), 1, color, -1)
 
         # params = [dist(f.pts_3d[50], f.pts_3d[55]), dist(f.pts_3d[62], f.pts_3d[58]), *f.quaternion]
-        params = [dist(f.pts_3d[50], f.pts_3d[55]) * 10, dist(f.pts_3d[62], f.pts_3d[58]) * 10, *f.euler]
+        # params = [float(dist(f.pts_3d[50], f.pts_3d[55])) * 1, float(dist(f.pts_3d[62], f.pts_3d[58])) * 1, *f.euler]
+        # params = [float(dist(f.pts_3d[50], f.pts_3d[55])) * 1, float(dist(f.pts_3d[62], f.pts_3d[58])) * 1]
         # params = [float(dist(f.pts_3d[50], f.pts_3d[55])), float(dist(f.pts_3d[62], f.pts_3d[58])), f.euler[0] * 10, f.euler[1] * 10, f.euler[2] * 10]
         # params = [dist(f.pts_3d[50], f.pts_3d[55]), dist(f.pts_3d[62], f.pts_3d[58])]
         # rot = f.quaternion
 
+        params = []
+        for p in f.pts_3d[48:].tolist():
+            for j in p:
+                params.append(j)
+
+        blank = np.empty((500, 500, 3))
+
         # print(params)
+
+        # for i in range(len(params)):
+        #     min_vals[i] = min(min_vals[i], params[i])
+        #     max_vals[i] = max(max_vals[i], params[i])
+        #     if min_vals[i] == max_vals[i]:
+        #         min_vals[i] -= 0.00000001
+        #     params[i] = (params[i] - min_vals[i]) / (max_vals[i] - min_vals[i])
+
+        blank = cv2.circle(blank, (int(params[2] * 500), int(params[10] * 500)), 15, (0, 255, 0), -1)
 
         start_time = time.perf_counter()
         # errors = np.array([])
@@ -166,12 +195,17 @@ while True:
         for img_params in images_parameters:
             # errors = np.append(errors, dist(params, img_params))
             errors.append(dist(params, img_params))
-        min_index = min(range(len(errors)), key=errors.__getitem__)
-        # min_index = np.argmin(errors)
+        # min_index = min(range(len(errors)), key=errors.__getitem__)
+        errors = np.array(errors)
+        min_index = np.argmin(errors)
+        indexes_set.add(min_index)
+        print(len(indexes_set))
+        blank = cv2.circle(blank, (int(images_parameters[min_index][0] * 500), int(images_parameters[min_index][1] * 500)), 15, (255, 0, 0), -1)
         # print(images_parameters[min_index])
         # print(dist(params, images_parameters[min_index]))
         print(f"{1000 * (time.perf_counter() - start_time):.2f}ms")
         img = cv2.imread(image_folder + images_filenames[min_index])
+        cv2.imshow("Pos", blank)
         cv2.imshow("Teto", img)
 
     cv2.imshow("Cap", frame)

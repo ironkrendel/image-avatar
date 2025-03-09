@@ -13,11 +13,12 @@ def dist(p1: list[3], p2: list[3]) -> float:
     return sqr_x + sqr_y + sqr_z
 
 def MetadataCreatorThread(path, filenames, model, quick):
-    try:
-        tracker = Tracker(
-            1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.8, detection_threshold=0.8
-        )
-        for f in filenames:
+    tracker = Tracker(
+        1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.85, detection_threshold=0.85
+    )
+    total_len = len(filenames)
+    for i, f in enumerate(filenames):
+        try:
             if not os.path.exists(path + f):
                 continue
             start_time = time.perf_counter()
@@ -28,11 +29,13 @@ def MetadataCreatorThread(path, filenames, model, quick):
             # tracker = Tracker(
             #     width, height, max_threads=1, model_type=model, max_faces=1, try_hard=True, silent=True
             # )
+
             tracker.width = width
             tracker.height = height
             tracker.faces = []
             tracker.additional_faces = []
             tracker.detected = 0
+
             faces = tracker.predict(img)
 
             if len(faces) < 1:
@@ -42,6 +45,9 @@ def MetadataCreatorThread(path, filenames, model, quick):
                 continue
 
             face = faces[0]
+
+            if face.euler[0] == 0 or face.euler[1] == 0 or face.euler[2] == 0:
+                continue
 
             # center_x = face.bbox[1] + face.bbox[3] / 2
             # center_y = face.bbox[0] + face.bbox[2] / 2
@@ -78,28 +84,81 @@ def MetadataCreatorThread(path, filenames, model, quick):
             # result['pts_3d'] = face.pts_3d.tolist()
             result['crop'] = os.path.splitext(f)[0] + '_crop' + os.path.splitext(f)[1]
             # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])), float(dist(face.pts_3d[62], face.pts_3d[58])), *(face.quaternion.tolist())]
-            result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])) * 10, float(dist(face.pts_3d[62], face.pts_3d[58])) * 10, *face.euler]
+            # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])) * 1, float(dist(face.pts_3d[62], face.pts_3d[58])) * 1, *face.euler]
+            # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])) * 1, float(dist(face.pts_3d[62], face.pts_3d[58])) * 1]
+            result['parameters'] = []
+            for p in face.pts_3d[48:].tolist():
+                for j in p:
+                    result['parameters'].append(j)
             # result['parameters'] = [*face.euler]
             # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])), float(dist(face.pts_3d[62], face.pts_3d[58])), face.euler[0] * 10, face.euler[1] * 10, face.euler[2] * 10]
             result_json = json.dumps(result)
-
             with open(path + os.path.splitext(f)[0] + '.json', 'w') as fout:
                 fout.write(result_json)
             cv2.imwrite(path + os.path.splitext(f)[0] + '_crop' + os.path.splitext(f)[1], crop_img)
-            print(f"{1000 * (time.perf_counter() - start_time):.2f}ms {f}")
-    except Exception as e:
-        print(e)
-        print(f)
+            print(f"{1000 * (time.perf_counter() - start_time):.2f}ms {i / total_len * 100:.2f}% {f}")
+        except Exception as e:
+            print(e)
+            print(f)
+            return
 
-def deleteOldMetadata(path):
+def MetadataNormalizer(path):
     allowed_extensions = ['.json']
     folder_contents = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and os.path.splitext(os.path.join(path, f))[1] in allowed_extensions]
-    for f in folder_contents:
-        with open(path + f, 'r') as cin:
-            img_data = json.loads(cin.read())
-        if os.path.exists(path + img_data['crop']):
-            os.remove(path + img_data['crop'])
+    if len(folder_contents) < 1:
+        return
+    with open(path + folder_contents[0], 'r') as cin:
+        tmp_data = json.loads(cin.read())
+    min_vals = [100000000000 for _ in range(len(tmp_data['parameters']))]
+    max_vals = [-100000000000 for _ in range(len(tmp_data['parameters']))]
+    print("Analyzing data range")
+    for i, f in enumerate(folder_contents):
+        if i % 100 == 0:
+            print(f"\r{i / len(folder_contents) * 100:.2f}%", end="")
+        try:
+            with open(path + f, 'r') as cin:
+                img_data = json.loads(cin.read())
+            for i in range(len(img_data['parameters'])):
+                min_vals[i] = min(min_vals[i], img_data['parameters'][i])
+                max_vals[i] = max(max_vals[i], img_data['parameters'][i])
+        except Exception as e:
+            pass
+    print()
+    print("Remaping values")
+    for i, f in enumerate(folder_contents):
+        if i % 100 == 0:
+            print(f"\r{i / len(folder_contents) * 100:.2f}%", end="")
+        try:
+            with open(path + f, 'r') as cin:
+                img_data = json.loads(cin.read())
+            new_params = []
+            for i in range(len(img_data['parameters'])):
+                new_params.append(((img_data['parameters'][i] - min_vals[i])) / (max_vals[i] - min_vals[i]))
+            img_data['parameters'] = new_params
+            result_json = json.dumps(img_data)
+            with open(path + f, 'w') as fout:
+                fout.write(result_json)
+        except Exception as e:
+            pass
+    print()
+
+def deleteOldMetadata(path):
+    print("Searching metadata files")
+    allowed_extensions = ['.json']
+    folder_contents = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and os.path.splitext(os.path.join(path, f))[1] in allowed_extensions]
+    print(f"Found {len(folder_contents)} files")
+    for i, f in enumerate(folder_contents):
+        if i % 100 == 0:
+            print(f"\r{i / len(folder_contents) * 100:.2f}%", end="")
+        try:
+            with open(path + f, 'r') as cin:
+                img_data = json.loads(cin.read())
+            if os.path.exists(path + img_data['crop']):
+                os.remove(path + img_data['crop'])
+        except:
+            pass
         os.remove(path + f)
+    print()
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -108,13 +167,17 @@ def main():
     parser.add_argument("-m", "--model", help="Select the model used for face processing", default=3, type=int)
     parser.add_argument("-D", "--delete", help="Delete all metadata and associated files", action="store_true")
     parser.add_argument("-Q", "--quick", help="Disables extra face detection scanning at the cost of less images being tagged", action="store_true")
+    parser.add_argument("-N", "--normalize", help="Normalize already created metadata", action="store_true")
 
     args=parser.parse_args()
-
+    print("Started")
     if args.delete:
         deleteOldMetadata(args.input)
         exit(0)
-
+    elif args.normalize:
+        MetadataNormalizer(args.input)
+        exit(0)
+    print("Scanning for existing crops")
     allowed_extensions = ['.json']
     folder_contents = [f for f in os.listdir(args.input) if os.path.isfile(os.path.join(args.input, f)) and os.path.splitext(os.path.join(args.input, f))[1] in allowed_extensions]
     ignore_files = []
@@ -124,7 +187,8 @@ def main():
             img_data = json.loads(cin.read())
         if os.path.exists(args.input + img_data['crop']):
             ignore_files.append(img_data['crop'])
-
+    print(f"Found {len(ignore_files)} cropped images")
+    print("Scanning existing images")
     allowed_extensions = ['.png', '.jpg', '.jpeg']
     folder_contents = [f for f in os.listdir(args.input) if os.path.isfile(os.path.join(args.input, f)) and os.path.splitext(os.path.join(args.input, f))[1] in allowed_extensions and f not in ignore_files]
 
@@ -144,11 +208,13 @@ def main():
         if start_index < len(folder_contents):
             for elem in folder_contents[start_index:]:
                 files[0].append(elem)
+    print(f"Found {len(folder_contents)} images")
 
     # files = [[_] for _ in folder_contents]
 
     input_data = [(args.input, files[_], args.model, args.quick) for _ in range(len(files))]
-
+    print("Created input data for workers")
+    print("Launching threads")
     start_time = time.perf_counter()
     process_pool = multiprocessing.Pool(min(args.max_threads, len(input_data)))
     process_pool.starmap(MetadataCreatorThread, input_data)
