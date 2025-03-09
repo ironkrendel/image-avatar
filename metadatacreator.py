@@ -12,10 +12,10 @@ def dist(p1: list[3], p2: list[3]) -> float:
     sqr_z = (p2[2] - p1[2]) ** 2
     return sqr_x + sqr_y + sqr_z
 
-def MetadataCreatorThread(path, filenames, model):
+def MetadataCreatorThread(path, filenames, model, quick):
     try:
         tracker = Tracker(
-            1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=True, silent=True, threshold=0.8, detection_threshold=0.8
+            1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.8, detection_threshold=0.8
         )
         for f in filenames:
             if not os.path.exists(path + f):
@@ -107,6 +107,7 @@ def main():
     parser.add_argument("-T", "--max-threads", help="Set the maximum number of threads", default=4, type=int)
     parser.add_argument("-m", "--model", help="Select the model used for face processing", default=3, type=int)
     parser.add_argument("-D", "--delete", help="Delete all metadata and associated files", action="store_true")
+    parser.add_argument("-Q", "--quick", help="Disables extra face detection scanning at the cost of less images being tagged", action="store_true")
 
     args=parser.parse_args()
 
@@ -146,7 +147,7 @@ def main():
 
     # files = [[_] for _ in folder_contents]
 
-    input_data = [(args.input, files[_], args.model) for _ in range(len(files))]
+    input_data = [(args.input, files[_], args.model, args.quick) for _ in range(len(files))]
 
     start_time = time.perf_counter()
     process_pool = multiprocessing.Pool(min(args.max_threads, len(input_data)))
