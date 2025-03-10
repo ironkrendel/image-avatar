@@ -86,8 +86,8 @@ for i, f in enumerate(folder_contents):
     images_parameters.append(img_data['parameters'])
 print(f"\rLoaded {len(images_parameters)} records")
 
-X = np.array(images_parameters)[:,2]
-Y = np.array(images_parameters)[:,10]
+X = np.array(images_parameters)[:, 0]
+Y = np.array(images_parameters)[:, 1]
 
 _fig, _ax = plt.subplots()
 _ax.scatter(X, Y)
@@ -118,6 +118,8 @@ indexes_set = set()
 
 min_vals = [100000000 for _ in range(10000)]
 max_vals = [-100000000 for _ in range(10000)]
+
+fig, ax = plt.subplots()
 
 while True:
     ret, frame = input_reader.read()
@@ -183,12 +185,12 @@ while True:
 
         # print(params)
 
-        # for i in range(len(params)):
-        #     min_vals[i] = min(min_vals[i], params[i])
-        #     max_vals[i] = max(max_vals[i], params[i])
-        #     if min_vals[i] == max_vals[i]:
-        #         min_vals[i] -= 0.00000001
-        #     params[i] = (params[i] - min_vals[i]) / (max_vals[i] - min_vals[i])
+        for i in range(len(params)):
+            min_vals[i] = min(min_vals[i], params[i])
+            max_vals[i] = max(max_vals[i], params[i])
+            if min_vals[i] == max_vals[i]:
+                min_vals[i] -= 0.00000001
+            params[i] = (params[i] - min_vals[i]) / (max_vals[i] - min_vals[i])
 
         blank = cv2.circle(blank, (int(params[0] * 500), int(params[1] * 500)), 15, (0, 255, 0), -1)
 
@@ -198,16 +200,16 @@ while True:
         for img_params in images_parameters:
             # errors = np.append(errors, dist(params, img_params))
             errors.append(dist(params, img_params))
-        # min_index = min(range(len(errors)), key=errors.__getitem__)
-        errors = np.array(errors)
+        min_index = min(range(len(errors)), key=errors.__getitem__)
+        # errors = np.array(errors)
 
-        fig, ax = plt.subplots()
+        ax.clear()
         ax.plot(errors)
         fig.canvas.draw()
         error_graph = np.array(fig.canvas.renderer.buffer_rgba())
         cv2.imshow("Error", error_graph)
 
-        min_index = np.argmin(errors)
+        # min_index = np.argmin(errors)
         indexes_set.add(min_index)
         print(len(indexes_set))
         blank = cv2.circle(blank, (int(images_parameters[min_index][0] * 500), int(images_parameters[min_index][1] * 500)), 15, (255, 0, 0), -1)
