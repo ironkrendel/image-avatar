@@ -76,7 +76,7 @@ image_folder = './Images/Frames/'
 folder_contents = [f for f in os.listdir(image_folder) if os.path.isfile(os.path.join(image_folder, f)) and os.path.splitext(os.path.join(image_folder, f))[1] in allowed_extensions]
 
 print("Loading data...")
-for i, f in enumerate(folder_contents[1000:10000]):
+for i, f in enumerate(folder_contents):
     if i % 100 == 0:
         print(f"\r{i/len(folder_contents) * 100:.2f}%", end="")
     with open(image_folder + f, 'r') as cin:
@@ -89,8 +89,11 @@ print(f"\rLoaded {len(images_parameters)} records")
 X = np.array(images_parameters)[:,2]
 Y = np.array(images_parameters)[:,10]
 
-plt.scatter(X, Y)
-plt.show()
+_fig, _ax = plt.subplots()
+_ax.scatter(X, Y)
+_fig.canvas.draw()
+point_plot = np.array(_fig.canvas.renderer.buffer_rgba())
+cv2.imshow("Points", point_plot)
 
 print("Initializing video capture...")
 input_reader = InputReader(
@@ -166,15 +169,15 @@ while True:
 
         # params = [dist(f.pts_3d[50], f.pts_3d[55]), dist(f.pts_3d[62], f.pts_3d[58]), *f.quaternion]
         # params = [float(dist(f.pts_3d[50], f.pts_3d[55])) * 1, float(dist(f.pts_3d[62], f.pts_3d[58])) * 1, *f.euler]
-        # params = [float(dist(f.pts_3d[50], f.pts_3d[55])) * 1, float(dist(f.pts_3d[62], f.pts_3d[58])) * 1]
+        params = [float(dist(f.pts_3d[50], f.pts_3d[55])) * 1, float(dist(f.pts_3d[62], f.pts_3d[58])) * 1]
         # params = [float(dist(f.pts_3d[50], f.pts_3d[55])), float(dist(f.pts_3d[62], f.pts_3d[58])), f.euler[0] * 10, f.euler[1] * 10, f.euler[2] * 10]
         # params = [dist(f.pts_3d[50], f.pts_3d[55]), dist(f.pts_3d[62], f.pts_3d[58])]
         # rot = f.quaternion
 
-        params = []
-        for p in f.pts_3d[48:].tolist():
-            for j in p:
-                params.append(j)
+        # params = []
+        # for p in f.pts_3d[48:].tolist():
+        #     for j in p:
+        #         params.append(j)
 
         blank = np.empty((500, 500, 3))
 
@@ -187,7 +190,7 @@ while True:
         #         min_vals[i] -= 0.00000001
         #     params[i] = (params[i] - min_vals[i]) / (max_vals[i] - min_vals[i])
 
-        blank = cv2.circle(blank, (int(params[2] * 500), int(params[10] * 500)), 15, (0, 255, 0), -1)
+        blank = cv2.circle(blank, (int(params[0] * 500), int(params[1] * 500)), 15, (0, 255, 0), -1)
 
         start_time = time.perf_counter()
         # errors = np.array([])
@@ -197,6 +200,13 @@ while True:
             errors.append(dist(params, img_params))
         # min_index = min(range(len(errors)), key=errors.__getitem__)
         errors = np.array(errors)
+
+        fig, ax = plt.subplots()
+        ax.plot(errors)
+        fig.canvas.draw()
+        error_graph = np.array(fig.canvas.renderer.buffer_rgba())
+        cv2.imshow("Error", error_graph)
+
         min_index = np.argmin(errors)
         indexes_set.add(min_index)
         print(len(indexes_set))

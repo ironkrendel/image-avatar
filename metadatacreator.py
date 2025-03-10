@@ -85,11 +85,11 @@ def MetadataCreatorThread(path, filenames, model, quick):
             result['crop'] = os.path.splitext(f)[0] + '_crop' + os.path.splitext(f)[1]
             # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])), float(dist(face.pts_3d[62], face.pts_3d[58])), *(face.quaternion.tolist())]
             # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])) * 1, float(dist(face.pts_3d[62], face.pts_3d[58])) * 1, *face.euler]
-            # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])) * 1, float(dist(face.pts_3d[62], face.pts_3d[58])) * 1]
-            result['parameters'] = []
-            for p in face.pts_3d[48:].tolist():
-                for j in p:
-                    result['parameters'].append(j)
+            result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])) * 1, float(dist(face.pts_3d[62], face.pts_3d[58])) * 1]
+            # result['parameters'] = []
+            # for p in face.pts_3d[48:].tolist():
+            #     for j in p:
+            #         result['parameters'].append(j)
             # result['parameters'] = [*face.euler]
             # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])), float(dist(face.pts_3d[62], face.pts_3d[58])), face.euler[0] * 10, face.euler[1] * 10, face.euler[2] * 10]
             result_json = json.dumps(result)
@@ -168,6 +168,8 @@ def main():
     parser.add_argument("-D", "--delete", help="Delete all metadata and associated files", action="store_true")
     parser.add_argument("-Q", "--quick", help="Disables extra face detection scanning at the cost of less images being tagged", action="store_true")
     parser.add_argument("-N", "--normalize", help="Normalize already created metadata", action="store_true")
+    parser.add_argument("-S", "--start", help="Index of file in a folder from which to start with", type=int, default=0)
+    parser.add_argument("-C", "--count", help="Total number of files to scan", type=int, default=-1)
 
     args=parser.parse_args()
     print("Started")
@@ -188,9 +190,14 @@ def main():
         if os.path.exists(args.input + img_data['crop']):
             ignore_files.append(img_data['crop'])
     print(f"Found {len(ignore_files)} cropped images")
+
     print("Scanning existing images")
     allowed_extensions = ['.png', '.jpg', '.jpeg']
     folder_contents = [f for f in os.listdir(args.input) if os.path.isfile(os.path.join(args.input, f)) and os.path.splitext(os.path.join(args.input, f))[1] in allowed_extensions and f not in ignore_files]
+    folder_contents = folder_contents[args.start:]
+
+    if args.count != -1:
+        folder_contents = folder_contents[:args.count]
 
     if len(folder_contents) <= 0:
         print("Input folder is empty!")
