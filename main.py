@@ -89,6 +89,10 @@ for i, f in enumerate(folder_contents):
     images_parameters.append(img_data['parameters'])
 print(f"\rLoaded {len(images_parameters)} records")
 
+if len(images_parameters) < 1:
+    print("No data to work with. Exiting")
+    exit(0)
+
 X = np.array(images_parameters)[:, 0]
 Y = np.array(images_parameters)[:, 1]
 
