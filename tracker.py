@@ -2,7 +2,10 @@ import os
 import numpy as np
 import math
 import cv2
-import torch
+try:
+    import torch
+except:
+    print("Failed to import pytorch. Either use cpu version of onnxruntime or install pytorch for gpu version.")
 import onnxruntime
 import time
 import queue

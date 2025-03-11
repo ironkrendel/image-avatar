@@ -73,6 +73,9 @@ images_parameters = []
 
 allowed_extensions = ['.json']
 image_folder = './Images/Frames/'
+if not os.path.exists(image_folder):
+    print("Input data folder doesn't exist!")
+    exit(1)
 folder_contents = [f for f in os.listdir(image_folder) if os.path.isfile(os.path.join(image_folder, f)) and os.path.splitext(os.path.join(image_folder, f))[1] in allowed_extensions]
 
 print("Loading data...")
