@@ -1,10 +1,8 @@
-import cv2
 import os
 import argparse
 import multiprocessing
 import json
 import time
-from tracker import Tracker, get_model_base_path
 
 def dist(p1: list[3], p2: list[3]) -> float:
     sqr_x = (p2[0] - p1[0]) ** 2
@@ -13,6 +11,9 @@ def dist(p1: list[3], p2: list[3]) -> float:
     return sqr_x + sqr_y + sqr_z
 
 def MetadataCreatorThread(path, filenames, model, quick):
+    import cv2
+    from tracker import Tracker, get_model_base_path
+
     tracker = Tracker(
         1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.85, detection_threshold=0.85
     )
@@ -179,6 +180,7 @@ def main():
     elif args.normalize:
         MetadataNormalizer(args.input)
         exit(0)
+
     print("Scanning for existing crops")
     allowed_extensions = ['.json']
     folder_contents = [f for f in os.listdir(args.input) if os.path.isfile(os.path.join(args.input, f)) and os.path.splitext(os.path.join(args.input, f))[1] in allowed_extensions]
