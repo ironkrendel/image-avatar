@@ -15,7 +15,7 @@ def MetadataCreatorThread(path, filenames, model, quick):
     from tracker import Tracker, get_model_base_path
 
     tracker = Tracker(
-        1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.85, detection_threshold=0.85
+        1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.85, detection_threshold=0.95
     )
     total_len = len(filenames)
     for i, f in enumerate(filenames):
@@ -43,6 +43,7 @@ def MetadataCreatorThread(path, filenames, model, quick):
                 # print('-' * 100)
                 # print(f)
                 # print('-' * 100)
+                print('\033[91m' + f"{1000 * (time.perf_counter() - start_time):.2f}ms {i / total_len * 100:.2f}% {f}" + '\033[0m')
                 continue
 
             face = faces[0]
@@ -97,11 +98,13 @@ def MetadataCreatorThread(path, filenames, model, quick):
             with open(path + os.path.splitext(f)[0] + '.json', 'w') as fout:
                 fout.write(result_json)
             cv2.imwrite(path + os.path.splitext(f)[0] + '_crop' + os.path.splitext(f)[1], crop_img)
-            print(f"{1000 * (time.perf_counter() - start_time):.2f}ms {i / total_len * 100:.2f}% {f}")
+            print('\033[92m' + f"{1000 * (time.perf_counter() - start_time):.2f}ms {i / total_len * 100:.2f}% {f}" + '\033[0m')
+        except KeyboardInterrupt:
+            break
         except Exception as e:
             print(e)
             print(f)
-            return
+            break
 
 def MetadataNormalizer(path):
     allowed_extensions = ['.json']

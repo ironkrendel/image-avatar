@@ -93,15 +93,6 @@ if len(images_parameters) < 1:
     print("No data to work with. Exiting")
     exit(0)
 
-X = np.array(images_parameters)[:, 0]
-Y = np.array(images_parameters)[:, 1]
-
-_fig, _ax = plt.subplots()
-_ax.scatter(X, Y)
-_fig.canvas.draw()
-point_plot = np.array(_fig.canvas.renderer.buffer_rgba())
-cv2.imshow("Points", point_plot)
-
 print("Initializing video capture...")
 input_reader = InputReader(
     capture=0, width=640, height=460, fps=30, raw_rgb=False, dcap=9, use_dshowcapture=True
@@ -126,7 +117,14 @@ indexes_set = set()
 min_vals = [100000000 for _ in range(10000)]
 max_vals = [-100000000 for _ in range(10000)]
 
-fig, ax = plt.subplots()
+for par in images_parameters:
+    for i, val in enumerate(par):
+        min_vals[i] = min(min_vals[i], val)
+        max_vals[i] = max(max_vals[i], val)
+
+if __debug__:
+    fig, ax = plt.subplots()
+    _fig, _ax = plt.subplots()
 
 while True:
     ret, frame = input_reader.read()
@@ -188,7 +186,8 @@ while True:
         #     for j in p:
         #         params.append(j)
 
-        blank = np.empty((500, 500, 3))
+        if __debug__:
+            blank = np.empty((500, 500, 3))
 
         # print(params)
 
@@ -199,32 +198,62 @@ while True:
                 min_vals[i] -= 0.00000001
             params[i] = (params[i] - min_vals[i]) / (max_vals[i] - min_vals[i])
 
-        blank = cv2.circle(blank, (int(params[0] * 500), int(params[1] * 500)), 15, (0, 255, 0), -1)
+        if __debug__:
+            blank = cv2.circle(blank, (int(params[0] * 500), 500 - int(params[1] * 500)), 15, (0, 255, 0), -1)
 
         start_time = time.perf_counter()
         # errors = np.array([])
         errors = []
+        normalized_img_params = []
         for img_params in images_parameters:
             # errors = np.append(errors, dist(params, img_params))
-            errors.append(dist(params, img_params))
+            _img_params = []
+            for i, p in enumerate(img_params):
+                _img_params.append((p - min_vals[i]) / (max_vals[i] - min_vals[i]))
+            errors.append(MSE(params, _img_params))
+            normalized_img_params.append(_img_params)
         min_index = min(range(len(errors)), key=errors.__getitem__)
         # errors = np.array(errors)
 
-        ax.clear()
-        ax.plot(errors)
-        fig.canvas.draw()
-        error_graph = np.array(fig.canvas.renderer.buffer_rgba())
-        cv2.imshow("Error", error_graph)
+        if __debug__:
+            ax.clear()
+            # X left - 0.125 * width
+            # X right -  0.9 * width
+            ax.plot(errors)
+            fig.canvas.draw()
+            error_graph = np.array(fig.canvas.renderer.buffer_rgba())
+            min_index_pos_x = (min_index / len(errors) * 0.775 * error_graph.shape[1]) + error_graph.shape[1] * 0.125
+            error_graph = cv2.circle(error_graph, (int(min_index_pos_x), int(error_graph.shape[0] * 0.1)), 5, (0, 0, 255), -1)
+            cv2.imshow("Error", error_graph)
+
+            X = np.array(normalized_img_params)[:, 0]
+            Y = np.array(normalized_img_params)[:, 1]
+
+            _ax.clear()
+            # _ax.set_xticks([0, 1])
+            # _ax.set_yticks([0, 1])
+            _ax.set_xlim(0, 1)
+            _ax.set_ylim(0, 1)
+            _ax.scatter(X, Y)
+            _fig.canvas.draw()
+            point_plot = np.array(_fig.canvas.renderer.buffer_rgba())
+            cv2.imshow("Points", point_plot)
 
         # min_index = np.argmin(errors)
-        indexes_set.add(min_index)
-        print(len(indexes_set))
-        blank = cv2.circle(blank, (int(images_parameters[min_index][0] * 500), int(images_parameters[min_index][1] * 500)), 15, (255, 0, 0), -1)
+        if __debug__:
+            indexes_set.add(min_index)
+            print(f"Total images used: {len(indexes_set)}")
+
+        if __debug__:
+            blank = cv2.circle(blank, (int(normalized_img_params[min_index][0] * 500), 500 - int(normalized_img_params[min_index][1] * 500)), 15, (255, 0, 0), -1)
+            # blank = cv2.circle(blank, (int(min_index / len(errors) * 500), 50), 5, (0, 0, 255), -1)
+        
         # print(images_parameters[min_index])
         # print(dist(params, images_parameters[min_index]))
         print(f"{1000 * (time.perf_counter() - start_time):.2f}ms")
         img = cv2.imread(image_folder + images_filenames[min_index])
-        cv2.imshow("Pos", blank)
+        if __debug__:
+            cv2.imshow("Pos", blank)
         cv2.imshow("Teto", img)
 
     cv2.imshow("Cap", frame)
