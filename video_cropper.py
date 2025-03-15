@@ -1,94 +1,112 @@
 import sys
-from PyQt6.QtGui import QPixmap, QPainter, QColor, QCursor
-from PyQt6.QtCore import QSize, Qt, QUrl, QRect
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QPushButton, QStackedLayout, QLabel, QVBoxLayout, QGridLayout
-from PyQt6.QtMultimediaWidgets import QVideoWidget
-from PyQt6.QtWidgets import QFileDialog
+from PyQt6.QtWidgets import (
+    QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QPushButton, QFileDialog, QVBoxLayout, QWidget
+)
 from PyQt6.QtMultimedia import QMediaPlayer
+from PyQt6.QtMultimediaWidgets import QGraphicsVideoItem
+from PyQt6.QtCore import Qt, QUrl, QRectF, QPointF
+from PyQt6.QtGui import QBrush, QColor, QPen
+
+
+class DraggableRectItem(QGraphicsRectItem):
+    def __init__(self, rect, parent=None):
+        super().__init__(rect, parent)
+        self.setFlag(QGraphicsRectItem.GraphicsItemFlag.ItemIsMovable, True)
+        self.setBrush(QBrush(QColor(255, 0, 0, 100)))
+        self.offset = QPointF()
+
+    def mousePressEvent(self, event):
+        self.offset = event.pos() - self.rect().center()
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        new_center = event.scenePos() - self.offset
+
+        scene_rect = self.scene().sceneRect()
+
+        rect_width = self.rect().width()
+        rect_height = self.rect().height()
+
+
+        scale_factor = self.scene().views()[0].transform().m11()
+        scaled_scene_rect = QRectF(
+            scene_rect.left() * scale_factor,
+            scene_rect.top() * scale_factor,
+            scene_rect.width() * scale_factor,
+            scene_rect.height() * scale_factor
+        )
+
+
+        new_center.setX(max(scaled_scene_rect.left() + rect_width / 2, min(new_center.x(), scaled_scene_rect.right() - rect_width / 2)))
+        new_center.setY(max(scaled_scene_rect.top() + rect_height / 2, min(new_center.y(), scaled_scene_rect.bottom() - rect_height / 2)))
+
+        self.setPos(new_center - QPointF(rect_width / 2, rect_height / 2))
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        
-        self.setWindowTitle("Video cropper")
+        self.setWindowTitle("Face cropper")
+        self.setGeometry(100, 100, 1200, 600)
 
-        self.setMinimumSize(QSize(256, 144))
-        self.resize(QSize(1280, 720))
+        self.view = QGraphicsView(self)
+        self.scene = QGraphicsScene(self)
+        self.view.setScene(self.scene)
 
-        self.setStyleSheet("background-color: white")
+        self.player = QMediaPlayer(self)
+        self.video_item = QGraphicsVideoItem()
+        self.scene.addItem(self.video_item)
+        self.player.setVideoOutput(self.video_item)
 
-        gridLayout = QGridLayout()
-        self.layout = QStackedLayout()
-        self.player = QMediaPlayer()
+        self.border_rect = QGraphicsRectItem()
+        self.border_rect.setPen(QPen(QColor(0, 0, 255), 2))
+        self.scene.addItem(self.border_rect)
 
-        self.overlay = OverlayWidget(self)
-        self.overlay.setGeometry(50, 50, 300, 200)
-        self.layout.addWidget(self.overlay)
-        # self.overlay.show()
+        self.scene.sceneRectChanged.connect(self.update_border_rect)
 
-        self.video = QVideoWidget()
-        self.video.setFixedSize(QSize(int(self.size().height() * 0.8 / 9 * 16), int(self.size().height() * 0.8)))
+        self.player.mediaStatusChanged.connect(self.on_media_status_changed)
 
-        select_file_button = QPushButton("Select video")
-        button = QPushButton("Start")
+        self.select_button = QPushButton("Select Video")
+        self.select_button.clicked.connect(self.select_video)
 
-        button.setStyleSheet("color: black")
-        select_file_button.setStyleSheet("color: black")
+        layout = QVBoxLayout()
+        layout.addWidget(self.view)
 
-        select_file_button.clicked.connect(self.get_file_location)
-        button.clicked.connect(self.button_click)
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.addWidget(self.select_button)
+        layout.addWidget(right_widget)
 
-        gridLayout.addWidget(self.video, 0, 1)
-        gridLayout.addWidget(button, 1, 1)
-        gridLayout.addWidget(select_file_button, 2,1)
-        
-        gridWidget = QWidget()
-        gridWidget.setLayout(gridLayout)
-        self.layout.addWidget(gridWidget)
+        central_widget = QWidget()
+        central_widget.setLayout(layout)
+        self.setCentralWidget(central_widget)
 
-        widget = QWidget()
-        widget.setLayout(self.layout)
+    def on_media_status_changed(self, status):
+        if status == QMediaPlayer.MediaStatus.LoadedMedia:
+            self.video_item.setScale(2.5)
+            video_size = self.video_item.size()
+            self.scene.setSceneRect(0,75, video_size.width()*2.5, 450)
+            self.video_item.setPos(0, 0)
 
-        self.setCentralWidget(widget)
+            self.rect_item = DraggableRectItem(QRectF(0, 0, 200, 150))
+            self.scene.addItem(self.rect_item)
 
-    def button_click(self):
-        print("Start")
+            print(video_size.width()*2.5, video_size.height()*2.5)
 
+    def update_border_rect(self, rect):
+        self.border_rect.setRect(rect)
 
-    def get_file_location(self):
-        dialog = QFileDialog(self)
-        dialog.setNameFilter(".mp4")
-        file = dialog.getOpenFileName(self, "Teto", "./", "Video Files (*.mp4;*.webm)")
-        self.player.setSource(QUrl(file[0]))
-        self.player.setVideoOutput(self.video)
-        self.video.show()
-        self.player.play()
-
-    def resizeEvent(self, event):
-        if self.size().width() / 16 >= self.size().height() / 9:
-            self.video.setFixedSize(QSize(int(self.size().height() * 0.8 / 9 * 16), int(self.size().height() * 0.8)))
-        else:
-            self.video.setFixedSize(QSize(int(self.size().width() * 0.8), int(self.size().width() * 0.8 / 16 * 9)))
+    def select_video(self):
+        file, _ = QFileDialog.getOpenFileName(
+            self, "Choose Video", "", "Teto (*.mp4 *.webm)"
+        )
+        if file:
+            self.player.setSource(QUrl.fromLocalFile(file))
+            self.player.play()
 
 
-class OverlayWidget(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setWindowFlags(self.windowFlags() | Qt.WindowType.FramelessWindowHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setStyleSheet("background: transparent;")
-        self.setMouseTracking(True)
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        painter.setBrush(QColor(0, 0, 0, 128))
-        painter.drawRect(self.rect())
-
-app = QApplication(sys.argv)
-
-window = MainWindow()
-window.show()
-
-app.exec()
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
