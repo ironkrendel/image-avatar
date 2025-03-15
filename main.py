@@ -80,7 +80,7 @@ if not os.path.exists(image_folder):
 folder_contents = [f for f in os.listdir(image_folder) if os.path.isfile(os.path.join(image_folder, f)) and os.path.splitext(os.path.join(image_folder, f))[1] in allowed_extensions]
 
 print("Loading data...")
-dbclient = pymongo.MongoClient(f"mongodb://localhost:25017/", serverSelectionTimeoutMS = 2000)
+dbclient = pymongo.MongoClient(f"mongodb://localhost:27017/", serverSelectionTimeoutMS = 2000)
 dbflag = True
 dbfileflag = True
 try:
