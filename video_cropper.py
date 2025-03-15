@@ -1,6 +1,6 @@
 import sys
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QPushButton, QFileDialog, QVBoxLayout, QWidget
+    QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsItemGroup, QPushButton, QFileDialog, QVBoxLayout, QWidget
 )
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QGraphicsVideoItem
@@ -16,7 +16,7 @@ class DraggableRectItem(QGraphicsRectItem):
         self.offset = QPointF()
 
     def mousePressEvent(self, event):
-        self.offset = event.pos() - self.rect().center()
+        # self.offset = event.pos() - self.rect().center()
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
@@ -27,7 +27,6 @@ class DraggableRectItem(QGraphicsRectItem):
         rect_width = self.rect().width()
         rect_height = self.rect().height()
 
-
         scale_factor = self.scene().views()[0].transform().m11()
         scaled_scene_rect = QRectF(
             scene_rect.left() * scale_factor,
@@ -36,12 +35,29 @@ class DraggableRectItem(QGraphicsRectItem):
             scene_rect.height() * scale_factor
         )
 
-
         new_center.setX(max(scaled_scene_rect.left() + rect_width / 2, min(new_center.x(), scaled_scene_rect.right() - rect_width / 2)))
         new_center.setY(max(scaled_scene_rect.top() + rect_height / 2, min(new_center.y(), scaled_scene_rect.bottom() - rect_height / 2)))
 
         self.setPos(new_center - QPointF(rect_width / 2, rect_height / 2))
 
+
+class CropRectItemGroup(QGraphicsItemGroup):
+    def __init__(self, VideoItemOffset, parent = None):
+        super().__init__(parent)
+        self.rect = DraggableRectItem(QRectF(0, 0, 200, 150))
+        self.rect.setPos(QPointF(VideoItemOffset.x(), VideoItemOffset.y()))
+        self.topLeftCircle = QGraphicsEllipseItem()
+        self.topLeftCircle.setBrush(QBrush(QColor(0, 255, 0, 100)))
+        self.topLeftCircle.setRect(QRectF(0, 0, 15, 15))
+        self.topLeftCircle.setPos(QPointF(VideoItemOffset.x(), VideoItemOffset.y()))
+        self.addToGroup(self.rect)
+        self.addToGroup(self.topLeftCircle)
+
+    def mousePressEvent(self, event):
+        self.rect.mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        self.rect.mouseMoveEvent(event)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -88,7 +104,8 @@ class MainWindow(QMainWindow):
             self.scene.setSceneRect(0,75, video_size.width()*2.5, 450)
             self.video_item.setPos(0, 0)
 
-            self.rect_item = DraggableRectItem(QRectF(0, 0, 200, 150))
+            # self.rect_item = DraggableRectItem(QRectF(0, 0, 200, 150))
+            self.rect_item = CropRectItemGroup(self.video_item.scene().sceneRect())
             self.scene.addItem(self.rect_item)
 
             print(video_size.width()*2.5, video_size.height()*2.5)
@@ -98,7 +115,7 @@ class MainWindow(QMainWindow):
 
     def select_video(self):
         file, _ = QFileDialog.getOpenFileName(
-            self, "Choose Video", "", "Teto (*.mp4 *.webm)"
+            self, "Choose Video", "", "Teto (*.mp4 *.webm *.mkv)"
         )
         if file:
             self.player.setSource(QUrl.fromLocalFile(file))
