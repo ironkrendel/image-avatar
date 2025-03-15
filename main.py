@@ -8,6 +8,7 @@ import multiprocessing
 import matplotlib.pyplot as plt
 from input_reader import InputReader, VideoReader, DShowCaptureReader, try_int
 from tracker import Tracker, get_model_base_path
+import pymongo
 
 print("Works!")
 
@@ -79,14 +80,44 @@ if not os.path.exists(image_folder):
 folder_contents = [f for f in os.listdir(image_folder) if os.path.isfile(os.path.join(image_folder, f)) and os.path.splitext(os.path.join(image_folder, f))[1] in allowed_extensions]
 
 print("Loading data...")
-for i, f in enumerate(folder_contents):
-    if i % 100 == 0:
-        print(f"\r{i/len(folder_contents) * 100:.2f}%", end="")
-    with open(image_folder + f, 'r') as cin:
-        img_data = json.loads(cin.read())
-    # print(img_data)
-    images_filenames.append(img_data['crop'])
-    images_parameters.append(img_data['parameters'])
+dbclient = pymongo.MongoClient(f"mongodb://localhost:25017/", serverSelectionTimeoutMS = 2000)
+dbflag = True
+dbfileflag = True
+try:
+    dbclient.server_info()
+except:
+    dbflag = False
+    print("Can't access MongoDB")
+
+if not os.path.exists("./Images/image_dataset.data.json"):
+    dbfileflag = False
+    print("No exported MongoDB json file found")
+
+if dbflag:
+    dbfileparsed = os.path.basename("./Images/image_dataset.data.json").split('.')
+    database = dbclient[dbfileparsed[0]]
+    dbcollection = database[dbfileparsed[1]]
+
+    dbdata = dbcollection.find({}, {"crop": 1, "parameters":1})
+
+    for obj in dbdata:
+        images_filenames.append(obj['crop'])
+        images_parameters.append(obj['parameters'])
+elif dbfileflag:
+    with open("./Images/image_dataset.data.json", 'r') as fin:
+        data = json.loads(fin.read())
+        for obj in data:
+            images_filenames.append(obj['crop'])
+            images_parameters.append(obj['parameters'])
+else:
+    for i, f in enumerate(folder_contents):
+        if i % 100 == 0:
+            print(f"\r{i/len(folder_contents) * 100:.2f}%", end="")
+        with open(image_folder + f, 'r') as cin:
+            img_data = json.loads(cin.read())
+        # print(img_data)
+        images_filenames.append(img_data['crop'])
+        images_parameters.append(img_data['parameters'])
 print(f"\rLoaded {len(images_parameters)} records")
 
 if len(images_parameters) < 1:

@@ -3,6 +3,9 @@ import argparse
 import multiprocessing
 import json
 import time
+import pymongo
+
+parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
 def dist(p1: list[3], p2: list[3]) -> float:
     sqr_x = (p2[0] - p1[0]) ** 2
@@ -10,9 +13,25 @@ def dist(p1: list[3], p2: list[3]) -> float:
     sqr_z = (p2[2] - p1[2]) ** 2
     return sqr_x + sqr_y + sqr_z
 
-def MetadataCreatorThread(path, filenames, model, quick):
+def MetadataCreatorThread(path, filenames, model, quick, dbaddr, dbport, dbfile):
     import cv2
     from tracker import Tracker, get_model_base_path
+
+    dbclient = pymongo.MongoClient(f"mongodb://{dbaddr}:{dbport}/")
+    dbflag = True
+    try:
+        dbclient.server_info()
+    except:
+        dbflag = False
+        print("Can't access MongoDB")
+
+    if dbflag:
+        dbfileparsed = os.path.basename(dbfile).split('.')
+        if len(dbfileparsed) == 3 and dbfileparsed[-1] == 'json':
+            database = dbclient[dbfileparsed[0]]
+            dbcollection = database[dbfileparsed[1]]
+        else:
+            dbflag = False
 
     tracker = Tracker(
         1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.85, detection_threshold=0.95
@@ -98,6 +117,8 @@ def MetadataCreatorThread(path, filenames, model, quick):
             with open(path + os.path.splitext(f)[0] + '.json', 'w') as fout:
                 fout.write(result_json)
             cv2.imwrite(path + os.path.splitext(f)[0] + '_crop' + os.path.splitext(f)[1], crop_img)
+            if dbflag:
+                dbcollection.insert_one(result)
             print('\033[92m' + f"{1000 * (time.perf_counter() - start_time):.2f}ms {i / total_len * 100:.2f}% {f}" + '\033[0m')
         except KeyboardInterrupt:
             break
@@ -105,6 +126,27 @@ def MetadataCreatorThread(path, filenames, model, quick):
             print(e)
             print(f)
             break
+
+def ExportDBToJson(dbaddr, dbport, file):
+    from bson.json_util import dumps
+
+    dbclient = pymongo.MongoClient(f"mongodb://{dbaddr}:{dbport}/")
+    try:
+        dbclient.server_info()
+    except:
+        print("Can't access MongoDB")
+        return
+
+    dbfileparsed = os.path.basename(file).split('.')
+    if len(dbfileparsed) == 3 and dbfileparsed[-1] == 'json':
+        database = dbclient[dbfileparsed[0]]
+        dbcollection = database[dbfileparsed[1]]
+
+    data = dbcollection.find().to_list()
+    for obj in data:
+        del obj['_id']
+    with open(file, 'w') as fout:
+        json.dump(json.loads(dumps(data)), fout)
 
 def MetadataNormalizer(path):
     allowed_extensions = ['.json']
@@ -165,8 +207,11 @@ def deleteOldMetadata(path):
     print()
 
 def main():
-    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-i", "--input", help="Folder with input data to create metadata for", default="./Images/Frames/")
+    parser.add_argument("-db", "--database", help="JSON file with exported MongoDB", default="./Images/image_dataset.data.json")
+    parser.add_argument("--database-port", help="MongoDB port", default=27017)
+    parser.add_argument("--database-address", help="MongoDB address", default="localhost")
+    parser.add_argument("-E", "--export", help="Export MongoDB to JSON", action="store_true")
     parser.add_argument("-T", "--max-threads", help="Set the maximum number of threads", default=4, type=int)
     parser.add_argument("-m", "--model", help="Select the model used for face processing", default=3, type=int)
     parser.add_argument("-D", "--delete", help="Delete all metadata and associated files", action="store_true")
@@ -176,12 +221,16 @@ def main():
     parser.add_argument("-C", "--count", help="Total number of files to scan", type=int, default=-1)
 
     args=parser.parse_args()
+
     print("Started")
     if args.delete:
         deleteOldMetadata(args.input)
         exit(0)
     elif args.normalize:
         MetadataNormalizer(args.input)
+        exit(0)
+    elif args.export:
+        ExportDBToJson(args.database_address, args.database_port, args.database)
         exit(0)
 
     print("Scanning for existing crops")
@@ -222,14 +271,31 @@ def main():
                 files[0].append(elem)
     print(f"Found {len(folder_contents)} images")
 
+    # database preparations
+    print("Dropping MongoDB collection")
+    dbclient = pymongo.MongoClient(f"mongodb://{args.database_address}:{args.database_port}/")
+    dbflag = True
+    try:
+        dbclient.server_info()
+        dbfileparsed = os.path.basename(args.database).split('.')
+        if len(dbfileparsed) == 3 and dbfileparsed[-1] == 'json':
+            database = dbclient[dbfileparsed[0]]
+            database.drop_collection(dbfileparsed[1])
+        print("Dropped MongoDB collection")
+    except:
+        dbflag = False
+        print("Can't access MongoDB")
+
     # files = [[_] for _ in folder_contents]
 
-    input_data = [(args.input, files[_], args.model, args.quick) for _ in range(len(files))]
+    input_data = [(args.input, files[_], args.model, args.quick, args.database_address, args.database_port, args.database) for _ in range(len(files))]
     print("Created input data for workers")
     print("Launching threads")
     start_time = time.perf_counter()
     process_pool = multiprocessing.Pool(min(args.max_threads, len(input_data)))
     process_pool.starmap(MetadataCreatorThread, input_data)
+
+    ExportDBToJson(args.database_address, args.database_port, args.database)
     print(f"Total duration: {time.perf_counter() - start_time:.2f}s")
 
 if __name__ == "__main__":
