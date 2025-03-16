@@ -1,6 +1,6 @@
 import sys
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsRectItem, QPushButton, QFileDialog, QVBoxLayout, QWidget
+    QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsItemGroup, QPushButton, QFileDialog, QVBoxLayout, QWidget
 )
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QGraphicsVideoItem
@@ -86,6 +86,24 @@ class DraggableRectItem(QGraphicsRectItem):
         print(f"Scene Position: x={scene_x}, y={scene_y}")
 
 
+class CropRectItemGroup(QGraphicsItemGroup):
+    def __init__(self, VideoItemOffset, parent = None):
+        super().__init__(parent)
+        self.rect = DraggableRectItem(QRectF(0, 0, 200, 150))
+        self.rect.setPos(QPointF(VideoItemOffset.x(), VideoItemOffset.y()))
+        self.topLeftCircle = QGraphicsEllipseItem()
+        self.topLeftCircle.setBrush(QBrush(QColor(0, 255, 0, 100)))
+        self.topLeftCircle.setRect(QRectF(0, 0, 15, 15))
+        self.topLeftCircle.setPos(QPointF(VideoItemOffset.x(), VideoItemOffset.y()))
+        self.addToGroup(self.rect)
+        self.addToGroup(self.topLeftCircle)
+
+    def mousePressEvent(self, event):
+        self.rect.mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        self.rect.mouseMoveEvent(event)
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -166,7 +184,8 @@ class MainWindow(QMainWindow):
             self.scene.setSceneRect(0, 75, video_size.width() * 2.5, 450)
             self.video_item.setPos(0, 0)
 
-            self.rect_item = DraggableRectItem(QRectF(0, 0, 200, 150))
+            # self.rect_item = DraggableRectItem(QRectF(0, 0, 200, 150))
+            self.rect_item = CropRectItemGroup(self.video_item.scene().sceneRect())
             self.scene.addItem(self.rect_item)
             print(video_size.width() * 2.5, video_size.height() * 2.5)
 
@@ -175,7 +194,7 @@ class MainWindow(QMainWindow):
 
     def select_video(self):
         file, _ = QFileDialog.getOpenFileName(
-            self, "Choose Teto", "", "Teto (*.mp4 *.webm)"
+            self, "Choose Video", "", "Video (*.mp4 *.webm *.mkv)"
         )
         if file:
             self.path_of_video = file
