@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QGraphicsVideoItem
-from PyQt6.QtCore import Qt, QUrl, QRectF, QPointF
+from PyQt6.QtCore import Qt, QUrl, QRectF, QPointF, QSizeF
 from PyQt6.QtGui import QBrush, QColor, QPen
 import ffmpeg
 import os
@@ -164,24 +164,31 @@ class MainWindow(QMainWindow):
         print(f"({width} {height} {scene_x} {scene_y})")
 
         output_dir = "Images"
-        (
-                ffmpeg.input(self.path_of_video)
-                .filter("crop", width, height, scene_x, scene_y)
-                .output(os.path.join(output_dir, "./Frames/frame_%09d.png"))
-                .run()
-        )
+        # (
+        #         ffmpeg.input(self.path_of_video)
+        #         .filter("crop", width, height, scene_x, scene_y)
+        #         .output(os.path.join(output_dir, "./Frames/frame_%09d.png"))
+        #         .run()
+        # )
 
     def on_media_status_changed(self, status):
-        if status == QMediaPlayer.MediaStatus.LoadedMedia and not self.border_rect_exists:
-            self.border_rect_exists = True
+        if status == QMediaPlayer.MediaStatus.BufferedMedia:
             self.media_loaded = True
-            self.video_item.setScale(2.5)
-            video_size = self.video_item.size()
-            self.scene.setSceneRect(0, 75, video_size.width() * 2.5, 450)
-            self.video_item.setPos(0, 0)
+            # resize video player and scene
+            video_width = self.player.videoSink().videoSize().width()
+            video_height = self.player.videoSink().videoSize().height()
+            converted_width = int(self.height() * 0.75 * (video_width / video_height))
+            converted_height = int(self.height() * 0.75)
+            self.scene.setSceneRect(0, 75, converted_width, converted_height)
+            self.video_item.setScale(1)
+            self.video_item.setPos(0, 75)
+            self.video_item.setSize(QSizeF(converted_width, converted_height))
 
-            self.rect_item = DraggableRectItem(QRectF(0, 0, 200, 150))
-            self.scene.addItem(self.rect_item)
+            if not self.border_rect_exists:
+                self.rect_item = DraggableRectItem(QRectF(0, 0, 200, 150))
+                self.rect_item.setPos(0, 75)
+                self.scene.addItem(self.rect_item)
+                self.border_rect_exists = True
             # print(video_size.width() * 2.5, video_size.height() * 2.5)
 
     def update_border_rect(self, rect):
@@ -198,7 +205,12 @@ class MainWindow(QMainWindow):
             self.start_button.setEnabled(True)
 
     def on_position_changed(self, value):
-        new_value = int(value / self.player.duration() * self.progress_slider.maximum())
+        if (self.player.duration() == 0):
+            self.player.stop()
+            print("Error when trying to play video!")
+            return
+        else:
+            new_value = int(value / self.player.duration() * self.progress_slider.maximum())
         self.progress_slider.setValue(new_value)
 
     def slider_mouse_pressed(self):
@@ -226,7 +238,14 @@ class MainWindow(QMainWindow):
 
     def resizeEvent(self, event):
         if self.media_loaded:
-            print("Resize")
+            video_width = self.player.videoSink().videoSize().width()
+            video_height = self.player.videoSink().videoSize().height()
+            converted_width = int(self.height() * 0.75 * (video_width / video_height))
+            converted_height = int(self.height() * 0.75)
+            self.scene.setSceneRect(0, 75, converted_width, converted_height)
+            self.video_item.setScale(1)
+            self.video_item.setPos(0, 75)
+            self.video_item.setSize(QSizeF(converted_width, converted_height))
 
 
 if __name__ == "__main__":
