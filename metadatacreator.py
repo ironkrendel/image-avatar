@@ -34,7 +34,7 @@ def MetadataCreatorThread(path, filenames, model, quick, dbaddr, dbport, dbfile)
             dbflag = False
 
     tracker = Tracker(
-        1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.85, detection_threshold=0.95
+        1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.85, detection_threshold=0.9
     )
     total_len = len(filenames)
     for i, f in enumerate(filenames):
