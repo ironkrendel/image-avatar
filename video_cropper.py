@@ -1,10 +1,10 @@
 import sys
 from PyQt6.QtWidgets import (
-    QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsItemGroup, QPushButton, QFileDialog, QVBoxLayout, QWidget
+    QApplication, QMainWindow, QGraphicsView, QGraphicsScene, QGraphicsEllipseItem, QGraphicsRectItem, QGraphicsItemGroup, QPushButton, QFileDialog, QVBoxLayout, QWidget, QSlider
 )
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QGraphicsVideoItem
-from PyQt6.QtCore import Qt, QUrl, QRectF, QPointF
+from PyQt6.QtCore import Qt, QUrl, QRectF, QPointF, QSizeF
 from PyQt6.QtGui import QBrush, QColor, QPen
 import ffmpeg
 import os
@@ -51,12 +51,12 @@ class DraggableRectItem(QGraphicsRectItem):
 
             self.setPos(new_center - QPointF(rect_width / 2, rect_height / 2))
 
-        self.print_rect_geometry()
+        # self.print_rect_geometry()
 
     def mouseReleaseEvent(self, event):
         self.resizing = False
         super().mouseReleaseEvent(event)
-        self.print_rect_geometry()
+        # self.print_rect_geometry()
 
     def paint(self, painter, option, widget=None):
         super().paint(painter, option, widget)
@@ -71,7 +71,7 @@ class DraggableRectItem(QGraphicsRectItem):
         painter.drawRect(handle_rect)
 
     def print_rect_geometry(self):
-        """Выводит текущие координаты и размеры прямоугольника."""
+        """Print current coordinates and size of rectangle."""
         rect = self.rect()
         x = rect.x()
         y = rect.y()
@@ -85,25 +85,6 @@ class DraggableRectItem(QGraphicsRectItem):
         print(f"Local Geometry: x={x}, y={y}, width={width}, height={height}")
         print(f"Scene Position: x={scene_x}, y={scene_y}")
 
-
-class CropRectItemGroup(QGraphicsItemGroup):
-    def __init__(self, VideoItemOffset, parent = None):
-        super().__init__(parent)
-        self.rect = DraggableRectItem(QRectF(0, 0, 200, 150))
-        self.rect.setPos(QPointF(VideoItemOffset.x(), VideoItemOffset.y()))
-        self.topLeftCircle = QGraphicsEllipseItem()
-        self.topLeftCircle.setBrush(QBrush(QColor(0, 255, 0, 100)))
-        self.topLeftCircle.setRect(QRectF(0, 0, 15, 15))
-        self.topLeftCircle.setPos(QPointF(VideoItemOffset.x(), VideoItemOffset.y()))
-        self.addToGroup(self.rect)
-        self.addToGroup(self.topLeftCircle)
-
-    def mousePressEvent(self, event):
-        self.rect.mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        self.rect.mouseMoveEvent(event)
-
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -115,16 +96,31 @@ class MainWindow(QMainWindow):
         self.view.setScene(self.scene)
 
         self.player = QMediaPlayer(self)
+        self.player.isSeekable = True
+        self.player.playingChanged.connect(self.pause_button_update_text)
         self.video_item = QGraphicsVideoItem()
         self.scene.addItem(self.video_item)
         self.player.setVideoOutput(self.video_item)
+        self.media_loaded = False
 
         self.border_rect = QGraphicsRectItem()
         self.border_rect.setPen(QPen(QColor(0, 0, 255), 2))
         self.scene.addItem(self.border_rect)
+        self.border_rect_exists = False
 
         self.scene.sceneRectChanged.connect(self.update_border_rect)
         self.player.mediaStatusChanged.connect(self.on_media_status_changed)
+        self.player.positionChanged.connect(self.on_position_changed)
+
+        self.progress_slider = QSlider(Qt.Orientation.Horizontal)
+        self.progress_slider.setMinimum(0)
+        self.progress_slider.setMaximum(10000)
+        self.progress_slider.setTickInterval(1)
+        self.progress_slider.sliderPressed.connect(self.slider_mouse_pressed)
+        self.progress_slider.sliderReleased.connect(self.slider_mouse_released)
+
+        self.pause_button = QPushButton("Pause")
+        self.pause_button.clicked.connect(self.pause_button_clicked)
 
         self.select_button = QPushButton("Select Video")
         self.select_button.clicked.connect(self.select_video)
@@ -140,6 +136,8 @@ class MainWindow(QMainWindow):
 
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
+        right_layout.addWidget(self.progress_slider)
+        right_layout.addWidget(self.pause_button)
         right_layout.addWidget(self.select_button)
         right_layout.addWidget(self.start_button)
         layout.addWidget(right_widget)
@@ -152,42 +150,46 @@ class MainWindow(QMainWindow):
 
     def video_cropper(self):
         if not self.path_of_video:
-            print("Видео не выбрано.")
+            print("No video choosen.")
             return
-
 
         rect = self.rect_item.rect()
         width = int(rect.width()) * 1.6
         height = int(rect.height()) * 1.2
 
-
         scene_pos = self.rect_item.scenePos()
         scene_x = int(scene_pos.x()) * 2.5
         scene_y = int(scene_pos.y()) * 2.5
 
-        print("(",width, height, scene_x, scene_y,")")
-
+        print(f"({width} {height} {scene_x} {scene_y})")
 
         output_dir = "Images"
-
-        (
-                ffmpeg.input(self.path_of_video)
-                .filter("crop", width, height, scene_x, scene_y)
-                .output(os.path.join(output_dir, "frame_%04d.png"), vframes=300)
-                .run()
-        )
+        # (
+        #         ffmpeg.input(self.path_of_video)
+        #         .filter("crop", width, height, scene_x, scene_y)
+        #         .output(os.path.join(output_dir, "./Frames/frame_%09d.png"))
+        #         .run()
+        # )
 
     def on_media_status_changed(self, status):
-        if status == QMediaPlayer.MediaStatus.LoadedMedia:
-            self.video_item.setScale(2.5)
-            video_size = self.video_item.size()
-            self.scene.setSceneRect(0, 75, video_size.width() * 2.5, 450)
-            self.video_item.setPos(0, 0)
+        if status == QMediaPlayer.MediaStatus.BufferedMedia:
+            self.media_loaded = True
+            # resize video player and scene
+            video_width = self.player.videoSink().videoSize().width()
+            video_height = self.player.videoSink().videoSize().height()
+            converted_width = int(self.height() * 0.75 * (video_width / video_height))
+            converted_height = int(self.height() * 0.75)
+            self.scene.setSceneRect(0, 75, converted_width, converted_height)
+            self.video_item.setScale(1)
+            self.video_item.setPos(0, 75)
+            self.video_item.setSize(QSizeF(converted_width, converted_height))
 
-            # self.rect_item = DraggableRectItem(QRectF(0, 0, 200, 150))
-            self.rect_item = CropRectItemGroup(self.video_item.scene().sceneRect())
-            self.scene.addItem(self.rect_item)
-            print(video_size.width() * 2.5, video_size.height() * 2.5)
+            if not self.border_rect_exists:
+                self.rect_item = DraggableRectItem(QRectF(0, 0, 200, 150))
+                self.rect_item.setPos(0, 75)
+                self.scene.addItem(self.rect_item)
+                self.border_rect_exists = True
+            # print(video_size.width() * 2.5, video_size.height() * 2.5)
 
     def update_border_rect(self, rect):
         self.border_rect.setRect(rect)
@@ -202,8 +204,53 @@ class MainWindow(QMainWindow):
             self.player.play()
             self.start_button.setEnabled(True)
 
+    def on_position_changed(self, value):
+        if (self.player.duration() == 0):
+            self.player.stop()
+            print("Error when trying to play video!")
+            return
+        else:
+            new_value = int(value / self.player.duration() * self.progress_slider.maximum())
+        self.progress_slider.setValue(new_value)
+
+    def slider_mouse_pressed(self):
+        self.player.pause()
+    
+    def slider_mouse_released(self):
+        if self.progress_slider.value() == 0:
+            new_pos = 0
+        else:
+            new_pos = int((self.progress_slider.value() / self.progress_slider.maximum()) * self.player.duration())
+        self.player.setPosition(new_pos)
+        self.player.play()
+
+    def pause_button_clicked(self):
+        if self.player.isPlaying():
+            self.player.pause()
+        else:
+            self.player.play()
+
+    def pause_button_update_text(self):
+        if self.player.isPlaying():
+            self.pause_button.setText("Pause")
+        else:
+            self.pause_button.setText("Play")
+
+    def resizeEvent(self, event):
+        if self.media_loaded:
+            video_width = self.player.videoSink().videoSize().width()
+            video_height = self.player.videoSink().videoSize().height()
+            converted_width = int(self.height() * 0.75 * (video_width / video_height))
+            converted_height = int(self.height() * 0.75)
+            self.scene.setSceneRect(0, 75, converted_width, converted_height)
+            self.video_item.setScale(1)
+            self.video_item.setPos(0, 75)
+            self.video_item.setSize(QSizeF(converted_width, converted_height))
+
 
 if __name__ == "__main__":
+    if os.name == "nt":
+        os.environ["QT_MEDIA_BACKEND"] = "windows"
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
