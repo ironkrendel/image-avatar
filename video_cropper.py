@@ -42,8 +42,8 @@ class DraggableRectItem(QGraphicsRectItem):
             rect_height = self.rect().height()
 
             new_pos = event.pos()
-            new_pos.setX(max(scene_rect.left(), min(event.scenePos().x(), scene_rect.right())) - self.x())
-            new_pos.setY(max(scene_rect.top(), min(event.scenePos().y(), scene_rect.bottom())) - self.y())
+            new_pos.setX(max(scene_rect.left() + self.x() - scene_rect.x() + 50, min(event.scenePos().x(), scene_rect.right())) - self.x())
+            new_pos.setY(max(scene_rect.top() + self.y() - scene_rect.y() + 50, min(event.scenePos().y(), scene_rect.bottom())) - self.y())
 
             rect = self.rect()
             rect.setBottomRight(new_pos)
