@@ -152,21 +152,30 @@ class MainWindow(QMainWindow):
         if not self.path_of_video:
             print("No video choosen.")
             return
+        
+        video_width = self.player.videoSink().videoSize().width()
+        video_height = self.player.videoSink().videoSize().height()
 
         rect = self.rect_item.rect()
-        width = int(rect.width()) * 1.6
-        height = int(rect.height()) * 1.2
+        rect_width = int(rect.width())
+        rect_height = int(rect.height())
+        rect_x = self.rect_item.pos().x()
+        rect_y = self.rect_item.pos().y()
 
-        scene_pos = self.rect_item.scenePos()
-        scene_x = int(scene_pos.x()) * 2.5
-        scene_y = int(scene_pos.y()) * 2.5
+        scene_width = self.scene.width()
+        scene_height = self.scene.height()
 
-        print(f"({width} {height} {scene_x} {scene_y})")
+        width = int(rect_width / scene_width * video_width)
+        height = int(rect_height / scene_height * video_height)
+        pos_x = int(rect_x / scene_width * video_width)
+        pos_y = int((rect_y - rect_height / 2) / scene_height * video_height)
+
+        print(f"({width} {height} {pos_x} {pos_y})")
 
         output_dir = "Images"
         # (
         #         ffmpeg.input(self.path_of_video)
-        #         .filter("crop", width, height, scene_x, scene_y)
+        #         .filter("crop", width, height, pos_x, pos_y)
         #         .output(os.path.join(output_dir, "./Frames/frame_%09d.png"))
         #         .run()
         # )
