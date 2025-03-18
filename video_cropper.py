@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QGraphicsVideoItem
-from PyQt6.QtCore import Qt, QUrl, QRectF, QPointF, QSizeF
+from PyQt6.QtCore import Qt, QUrl, QRectF, QPointF, QSizeF, QSize
 from PyQt6.QtGui import QBrush, QColor, QPen
 import ffmpeg
 import os
@@ -20,6 +20,8 @@ class DraggableRectItem(QGraphicsRectItem):
         self.offset = QPointF()
         self.resizing = False
         self.resize_handle_size = 10
+        self.size_x = 0
+        self.size_y = 0
 
     def mousePressEvent(self, event):
         rect = self.rect()
@@ -30,17 +32,27 @@ class DraggableRectItem(QGraphicsRectItem):
         ):
             self.resizing = True
         else:
-            self.offset = event.pos() - rect.center()
+            # self.offset = event.pos() - rect.center()
             super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event):
         if self.resizing:
+            scene_rect = self.scene().sceneRect()
+            rect_width = self.rect().width()
+            rect_height = self.rect().height()
+
             new_pos = event.pos()
+            new_pos.setX(max(scene_rect.left() + self.x() - scene_rect.x() + 50, min(event.scenePos().x(), scene_rect.right())) - self.x())
+            new_pos.setY(max(scene_rect.top() + self.y() - scene_rect.y() + 50, min(event.scenePos().y(), scene_rect.bottom())) - self.y())
+
             rect = self.rect()
             rect.setBottomRight(new_pos)
             self.setRect(rect)
+            self.size_x = self.rect().width() / self.scene().sceneRect().width()
+            self.size_y = self.rect().height() / self.scene().sceneRect().height()
         else:
-            new_center = event.scenePos() - self.offset
+            # new_center = event.scenePos() - self.offset
+            new_center = event.scenePos()
             scene_rect = self.scene().sceneRect()
 
             rect_width = self.rect().width()
@@ -51,6 +63,10 @@ class DraggableRectItem(QGraphicsRectItem):
 
             self.setPos(new_center - QPointF(rect_width / 2, rect_height / 2))
 
+        # rect = self.rect()
+        # rect.setBottomRight(QPointF(self.rect().x() + self.size_x * self.scene().sceneRect().width(), self.rect().y() + self.size_y * self.scene().sceneRect().height()))
+        # self.setRect(rect)
+
         # self.print_rect_geometry()
 
     def mouseReleaseEvent(self, event):
@@ -60,7 +76,12 @@ class DraggableRectItem(QGraphicsRectItem):
 
     def paint(self, painter, option, widget=None):
         super().paint(painter, option, widget)
-        rect = self.rect()
+        if self.size_x == 0 or self.size_y == 0:
+            self.size_x = self.rect().width() / self.scene().sceneRect().width()
+            self.size_y = self.rect().height() / self.scene().sceneRect().height()
+        scene_width = self.scene().sceneRect().width()
+        scene_height = self.scene().sceneRect().height()
+        rect = QRectF(0, 0, self.size_x * scene_width, self.size_y * scene_height)
         handle_rect = QRectF(
             rect.right() - self.resize_handle_size,
             rect.bottom() - self.resize_handle_size,
@@ -69,6 +90,9 @@ class DraggableRectItem(QGraphicsRectItem):
         )
         painter.setBrush(QBrush(Qt.GlobalColor.blue))
         painter.drawRect(handle_rect)
+        rect = self.rect()
+        rect.setBottomRight(QPointF(int(rect.x() + scene_width * self.size_x), int(rect.y() + scene_height * self.size_y)))
+        self.setRect(rect)
 
     def print_rect_geometry(self):
         """Print current coordinates and size of rectangle."""
@@ -152,24 +176,35 @@ class MainWindow(QMainWindow):
         if not self.path_of_video:
             print("No video choosen.")
             return
+        
+        video_width = self.player.videoSink().videoSize().width()
+        video_height = self.player.videoSink().videoSize().height()
 
         rect = self.rect_item.rect()
-        width = int(rect.width()) * 1.6
-        height = int(rect.height()) * 1.2
+        rect_width = int(rect.width())
+        rect_height = int(rect.height())
+        rect_x = self.rect_item.pos().x()
+        rect_y = self.rect_item.pos().y()
 
-        scene_pos = self.rect_item.scenePos()
-        scene_x = int(scene_pos.x()) * 2.5
-        scene_y = int(scene_pos.y()) * 2.5
+        scene_width = self.scene.width()
+        scene_height = self.scene.height()
+        scene_x = self.scene.sceneRect().x()
+        scene_y = self.scene.sceneRect().y()
 
-        print(f"({width} {height} {scene_x} {scene_y})")
+        width = int(rect_width / scene_width * video_width)
+        height = int(rect_height / scene_height * video_height)
+        pos_x = int((rect_x - scene_x) / scene_width * video_width)
+        pos_y = int((rect_y - scene_y) / scene_height * video_height)
+
+        print(f"({width} {height} {pos_x} {pos_y})")
 
         output_dir = "Images"
-        # (
-        #         ffmpeg.input(self.path_of_video)
-        #         .filter("crop", width, height, scene_x, scene_y)
-        #         .output(os.path.join(output_dir, "./Frames/frame_%09d.png"))
-        #         .run()
-        # )
+        (
+                ffmpeg.input(self.path_of_video)
+                .filter("crop", width, height, pos_x, pos_y)
+                .output(os.path.join(output_dir, "Frames\\frame_%09d.jpg"), qmin=1, qscale=2)
+                .run()
+        )
 
     def on_media_status_changed(self, status):
         if status == QMediaPlayer.MediaStatus.BufferedMedia:
