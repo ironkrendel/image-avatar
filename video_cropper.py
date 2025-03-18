@@ -4,7 +4,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QGraphicsVideoItem
-from PyQt6.QtCore import Qt, QUrl, QRectF, QPointF, QSizeF
+from PyQt6.QtCore import Qt, QUrl, QRectF, QPointF, QSizeF, QSize
 from PyQt6.QtGui import QBrush, QColor, QPen
 import ffmpeg
 import os
@@ -164,11 +164,13 @@ class MainWindow(QMainWindow):
 
         scene_width = self.scene.width()
         scene_height = self.scene.height()
+        scene_x = self.scene.sceneRect().x()
+        scene_y = self.scene.sceneRect().y()
 
         width = int(rect_width / scene_width * video_width)
         height = int(rect_height / scene_height * video_height)
-        pos_x = int(rect_x / scene_width * video_width)
-        pos_y = int((rect_y - rect_height / 2) / scene_height * video_height)
+        pos_x = int((rect_x - scene_x) / scene_width * video_width)
+        pos_y = int((rect_y - scene_y) / scene_height * video_height)
 
         print(f"({width} {height} {pos_x} {pos_y})")
 
@@ -189,6 +191,7 @@ class MainWindow(QMainWindow):
             converted_width = int(self.height() * 0.75 * (video_width / video_height))
             converted_height = int(self.height() * 0.75)
             self.scene.setSceneRect(0, 75, converted_width, converted_height)
+            self.view.setFixedSize(QSize(converted_width, converted_height))
             self.video_item.setScale(1)
             self.video_item.setPos(0, 75)
             self.video_item.setSize(QSizeF(converted_width, converted_height))
@@ -252,6 +255,7 @@ class MainWindow(QMainWindow):
             converted_width = int(self.height() * 0.75 * (video_width / video_height))
             converted_height = int(self.height() * 0.75)
             self.scene.setSceneRect(0, 75, converted_width, converted_height)
+            self.view.setFixedSize(QSize(converted_width, converted_height))
             self.video_item.setScale(1)
             self.video_item.setPos(0, 75)
             self.video_item.setSize(QSizeF(converted_width, converted_height))
