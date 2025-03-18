@@ -34,7 +34,8 @@ def MetadataCreatorThread(path, filenames, model, quick, dbaddr, dbport, dbfile)
             dbflag = False
 
     tracker = Tracker(
-        1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.85, detection_threshold=0.9
+        # 1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.85, detection_threshold=0.85
+        1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True
     )
     total_len = len(filenames)
     for i, f in enumerate(filenames):
@@ -67,7 +68,8 @@ def MetadataCreatorThread(path, filenames, model, quick, dbaddr, dbport, dbfile)
 
             face = faces[0]
 
-            if face.euler[0] == 0 or face.euler[1] == 0 or face.euler[2] == 0:
+            if face.euler[0] == 0 or face.euler[1] == 0 or face.euler[2] == 0 or float(dist(face.pts_3d[50], face.pts_3d[55])) >= 0.35 or float(dist(face.pts_3d[62], face.pts_3d[58])) >= 0.35:
+                print('\033[91m' + f"{1000 * (time.perf_counter() - start_time):.2f}ms {i / total_len * 100:.2f}% {f}" + '\033[0m')
                 continue
 
             # center_x = face.bbox[1] + face.bbox[3] / 2
@@ -238,11 +240,13 @@ def main():
     folder_contents = [f for f in os.listdir(args.input) if os.path.isfile(os.path.join(args.input, f)) and os.path.splitext(os.path.join(args.input, f))[1] in allowed_extensions]
     ignore_files = []
 
-    for f in folder_contents:
+    for i, f in enumerate(folder_contents):
+        print(f"\r{i / len(folder_contents) * 100:.2f}%", end="")
         with open(args.input + f, 'r') as cin:
             img_data = json.loads(cin.read())
         if os.path.exists(args.input + img_data['crop']):
             ignore_files.append(img_data['crop'])
+    print()
     print(f"Found {len(ignore_files)} cropped images")
 
     print("Scanning existing images")
