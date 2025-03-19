@@ -13,6 +13,15 @@ from sklearn.neighbors import KDTree
 
 print("Works!")
 
+bias = [0 for _ in range(10000)]
+bias[0] = -0.07
+bias[1] = -0.05
+
+weights = [1 for _ in range(10000)]
+weights[2] = 0
+weights[3] = 0
+weights[4] = 0
+
 # face oval
 # 0 - 16
 
@@ -213,7 +222,7 @@ while time.perf_counter() - data_sampling_start_time <= 2:
 
         params = [float(dist(f.pts_3d[50], f.pts_3d[55])) * 1, float(dist(f.pts_3d[62], f.pts_3d[58])) * 1]
 
-        for i in range(len(params)):
+        for i in range(2):
             if params[i] < min_vals[i]:
                 min_vals[i] = params[i]
                 data_sampling_start_time = time.perf_counter()
@@ -233,7 +242,11 @@ normalized_img_params = []
 for img_params in images_parameters:
     _img_params = []
     for i, p in enumerate(img_params):
-        _img_params.append((p - min_vals[i]) / (max_vals[i] - min_vals[i]))
+        if i >= 2:
+            _img_params.append(p)
+        else:
+            _img_params.append((p - min_vals[i]) / (max_vals[i] - min_vals[i]))
+        _img_params[i] *= weights[i]
     normalized_img_params.append(_img_params)
 
 if __debug__:
@@ -260,49 +273,51 @@ while True:
         f = copy.copy(f)
         # print(f.pts_3d)
         # print(f.normalize_pts3d(f.pts_3d))
-        # frame = cv2.putText(
-        #     frame,
-        #     str(f.id),
-        #     (int(f.bbox[0]), int(f.bbox[1])),
-        #     cv2.FONT_HERSHEY_SIMPLEX,
-        #     0.75,
-        #     (255, 0, 255),
-        # )
-        # frame = cv2.putText(
-        #     frame,
-        #     f"{f.conf:.4f}",
-        #     (int(f.bbox[0] + 18), int(f.bbox[1] - 6)),
-        #     cv2.FONT_HERSHEY_SIMPLEX,
-        #     0.5,
-        #     (0, 0, 255),
-        # )
+        frame = cv2.putText(
+            frame,
+            str(f.id),
+            (int(f.bbox[0]), int(f.bbox[1])),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.75,
+            (255, 0, 255),
+        )
+        frame = cv2.putText(
+            frame,
+            f"{f.conf:.4f}",
+            (int(f.bbox[0] + 18), int(f.bbox[1] - 6)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (0, 0, 255),
+        )
 
-        # box_y = int(f.bbox[0])
-        # box_x = int(f.bbox[1])
-        # box_y_size = int(f.bbox[2])
-        # box_x_size = int(f.bbox[3])
-        # frame = cv2.rectangle(frame, (box_y, box_x), (box_y + box_y_size, box_x + box_x_size), (255, 0, 0), 1)
+        box_y = int(f.bbox[0])
+        box_x = int(f.bbox[1])
+        box_y_size = int(f.bbox[2])
+        box_x_size = int(f.bbox[3])
+        frame = cv2.rectangle(frame, (box_y, box_x), (box_y + box_y_size, box_x + box_x_size), (255, 0, 0), 1)
 
-        # for pt_num, (x, y, c) in enumerate(f.lms):
-        #     # if pt_num == 66 and (f.eye_blink[0] < 0.30 or c < 0.20):
-        #         # continue
-        #     # if pt_num == 67 and (f.eye_blink[1] < 0.30 or c < 0.20):
-        #         # continue
-        #     x = int(x + 0.5)
-        #     y = int(y + 0.5)
-        #     color = (0, 255, 0)
-        #     if pt_num >= 66:
-        #         color = (255, 255, 0)
-        #     if pt_num == 33:
-        #         color = (255, 0, 255)
-        #         pass
-        #     if not (x < 0 or y < 0 or x >= height or y >= width):
-        #         cv2.circle(frame, (y, x), 1, color, -1)
+        for pt_num, (x, y, c) in enumerate(f.lms):
+            # if pt_num == 66 and (f.eye_blink[0] < 0.30 or c < 0.20):
+                # continue
+            # if pt_num == 67 and (f.eye_blink[1] < 0.30 or c < 0.20):
+                # continue
+            x = int(x + 0.5)
+            y = int(y + 0.5)
+            color = (0, 255, 0)
+            if pt_num >= 66:
+                color = (255, 255, 0)
+            if pt_num == 33:
+                color = (255, 0, 255)
+                pass
+            if not (x < 0 or y < 0 or x >= height or y >= width):
+                cv2.circle(frame, (y, x), 1, color, -1)
 
         # params = [dist(f.pts_3d[50], f.pts_3d[55]), dist(f.pts_3d[62], f.pts_3d[58]), *f.quaternion]
         # params = [float(dist(f.pts_3d[50], f.pts_3d[55])) * 1, float(dist(f.pts_3d[62], f.pts_3d[58])) * 1, *f.euler]
-        params = [float(dist(f.pts_3d[50], f.pts_3d[55])) * 1, float(dist(f.pts_3d[62], f.pts_3d[58])) * 1]
-        # params = [float(dist(f.pts_3d[50], f.pts_3d[55])), float(dist(f.pts_3d[62], f.pts_3d[58])), f.euler[0] * 10, f.euler[1] * 10, f.euler[2] * 10]
+        # params = [float(dist(f.pts_3d[50], f.pts_3d[55])) * 1, float(dist(f.pts_3d[62], f.pts_3d[58])) * 1]
+        params = [float(dist(f.pts_3d[50], f.pts_3d[55])), float(dist(f.pts_3d[62], f.pts_3d[58])), f.euler[0], f.euler[1], f.euler[2]]
+        for i in range(len(params)):
+            params[i] *= weights[i]
         # params = [dist(f.pts_3d[50], f.pts_3d[55]), dist(f.pts_3d[62], f.pts_3d[58])]
         # rot = f.quaternion
 
@@ -316,12 +331,14 @@ while True:
 
         # print(params)
 
-        for i in range(len(params)):
+        # for i in range(len(params)):
+        for i in range(2):
             # min_vals[i] = min(min_vals[i], params[i])
             # max_vals[i] = max(max_vals[i], params[i])
             # if min_vals[i] == max_vals[i]:
             #     min_vals[i] -= 0.00000001
             params[i] = (params[i] - min_vals[i]) / (max_vals[i] - min_vals[i])
+            params[i] += bias[i]
 
         if __debug__:
             blank = cv2.circle(blank, (int(params[0] * 500), 500 - int(params[1] * 500)), 15, (0, 255, 0), -1)

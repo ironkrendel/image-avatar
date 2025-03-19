@@ -14,6 +14,9 @@ def dist(p1: list[3], p2: list[3]) -> float:
     return sqr_x + sqr_y + sqr_z
 
 def MetadataCreatorThread(path, filenames, model, quick, dbaddr, dbport, dbfile):
+    if len(filenames) < 1:
+        return
+
     import cv2
     from tracker import Tracker, get_model_base_path
 
@@ -33,9 +36,11 @@ def MetadataCreatorThread(path, filenames, model, quick, dbaddr, dbport, dbfile)
         else:
             dbflag = False
 
+    sample_img = cv2.imread(path + filenames[0])
+
     tracker = Tracker(
-        # 1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.85, detection_threshold=0.85
-        1920, 1080, max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True
+        # sample_img.shape[1], sample_img.shape[0], max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.85, detection_threshold=0.85
+        sample_img.shape[1], sample_img.shape[0], max_threads=1, model_type=model, max_faces=1, try_hard=(not quick), silent=True, threshold=0.8, detection_threshold=0.7
     )
     total_len = len(filenames)
     for i, f in enumerate(filenames):
@@ -88,9 +93,29 @@ def MetadataCreatorThread(path, filenames, model, quick, dbaddr, dbport, dbfile)
             crop_start_y = int(center[1] - side / 2)
             # crop_img = cv2.rectangle(img, (crop_start_x, crop_start_y), (crop_start_x + int(side), crop_start_y + int(side)), (255, 0, 0), 1)
 
+            # for pt_num, (x, y, c) in enumerate(face.lms):
+            #     x = int(x + 0.5)
+            #     y = int(y + 0.5)
+            #     color = (0, 255, 0)
+            #     if pt_num >= 66:
+            #         color = (255, 255, 0)
+            #     if pt_num == 33:
+            #         color = (255, 0, 255)
+            #         pass
+            #     if not (x < 0 or y < 0 or x >= height or y >= width):
+            #         cv2.circle(img, (y, x), 1, color, -1)
+
+            # img = cv2.putText(
+            #     img,
+            #     f"{face.conf:.4f}",
+            #     (int(face.bbox[0] + 18), int(face.bbox[1] - 6)),
+            #     cv2.FONT_HERSHEY_SIMPLEX,
+            #     0.5,
+            #     (0, 0, 255),
+            # )
+
             crop_img = img[crop_start_y:crop_start_y + int(side), crop_start_x:crop_start_x + int(side)]
             crop_img = cv2.resize(crop_img, (500, 500), interpolation=cv2.INTER_LINEAR)
-
 
             # box_y = int(face.bbox[0])
             # box_x = int(face.bbox[1])
@@ -107,8 +132,8 @@ def MetadataCreatorThread(path, filenames, model, quick, dbaddr, dbport, dbfile)
             # result['pts_3d'] = face.pts_3d.tolist()
             result['crop'] = os.path.splitext(f)[0] + '_crop' + os.path.splitext(f)[1]
             # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])), float(dist(face.pts_3d[62], face.pts_3d[58])), *(face.quaternion.tolist())]
-            # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])) * 1, float(dist(face.pts_3d[62], face.pts_3d[58])) * 1, *face.euler]
-            result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])) * 1, float(dist(face.pts_3d[62], face.pts_3d[58])) * 1]
+            result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])) * 1, float(dist(face.pts_3d[62], face.pts_3d[58])) * 1, face.euler[0] * 1, face.euler[1] * 1, face.euler[2] * 1]
+            # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])) * 1, float(dist(face.pts_3d[62], face.pts_3d[58])) * 1]
             # result['parameters'] = []
             # for p in face.pts_3d[48:].tolist():
             #     for j in p:
@@ -241,13 +266,13 @@ def main():
     ignore_files = []
 
     for i, f in enumerate(folder_contents):
-        print(f"\r{i / len(folder_contents) * 100:.2f}%", end="")
+        if i % 100 == 0:
+            print(f"\r{i / len(folder_contents) * 100:.2f}%", end="")
         with open(args.input + f, 'r') as cin:
             img_data = json.loads(cin.read())
         if os.path.exists(args.input + img_data['crop']):
             ignore_files.append(img_data['crop'])
-    print()
-    print(f"Found {len(ignore_files)} cropped images")
+    print(f"\rFound {len(ignore_files)} cropped images")
 
     print("Scanning existing images")
     allowed_extensions = ['.png', '.jpg', '.jpeg']
