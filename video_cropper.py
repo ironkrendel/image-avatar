@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtMultimediaWidgets import QGraphicsVideoItem
 from PyQt6.QtCore import Qt, QUrl, QRectF, QPointF, QSizeF, QSize
-from PyQt6.QtGui import QBrush, QColor, QPen
+from PyQt6.QtGui import QBrush, QColor, QPen, QResizeEvent
 import ffmpeg
 import os
 
@@ -176,6 +176,9 @@ class MainWindow(QMainWindow):
         if not self.path_of_video:
             print("No video choosen.")
             return
+
+        if not os.path.exists("Images/Frames/"):
+            os.makedirs("Images/Frames/")
         
         video_width = self.player.videoSink().videoSize().width()
         video_height = self.player.videoSink().videoSize().height()
@@ -271,7 +274,7 @@ class MainWindow(QMainWindow):
         else:
             self.pause_button.setText("Play")
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, event: QResizeEvent):
         if self.media_loaded:
             video_width = self.player.videoSink().videoSize().width()
             video_height = self.player.videoSink().videoSize().height()
@@ -280,6 +283,13 @@ class MainWindow(QMainWindow):
             self.scene.setSceneRect(0, 75, converted_width, converted_height)
             self.video_item.setScale(1)
             self.video_item.setPos(0, 75)
+
+            if self.video_item.size().width() != converted_width:
+                self.rect_item.setPos(self.rect_item.pos().x() * (converted_width / self.video_item.size().width()), self.rect_item.pos().y())
+            if self.video_item.size().height() != converted_height:
+                # global position of crop rectangle is always offset by 75 on y-axis so it is necessary to first subtract this value for correct scaling and add it again after as an offset
+                self.rect_item.setPos(self.rect_item.pos().x(), (self.rect_item.pos().y() - 75) * (converted_height / self.video_item.size().height()) + 75)
+
             self.video_item.setSize(QSizeF(converted_width, converted_height))
 
 

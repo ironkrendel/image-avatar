@@ -13,7 +13,7 @@ from sklearn.neighbors import KDTree
 
 print("Works!")
 
-bias = [0 for _ in range(10000)]
+bias = [0.0 for _ in range(10000)]
 bias[0] = -0.07
 bias[1] = -0.05
 
@@ -63,8 +63,8 @@ weights[4] = 0
 # bottom teeth
 # 63 - 65
 
-min_vals = [100000000 for _ in range(10000)]
-max_vals = [-100000000 for _ in range(10000)]
+min_vals = [100000000.0 for _ in range(10000)]
+max_vals = [-100000000.0 for _ in range(10000)]
 
 def dist(p1: list, p2: list) -> float:
     if len(p1) != len(p2):
