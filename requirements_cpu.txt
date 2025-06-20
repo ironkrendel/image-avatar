@@ -6,3 +6,5 @@ scikit-learn
 pandas
 matplotlib
 pymongo
+pyqt6
+ffmpeg-python
