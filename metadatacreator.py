@@ -3,38 +3,26 @@ import argparse
 import multiprocessing
 import json
 import time
-import pymongo
+from multiprocessing.managers import BaseManager
+
+from metadata_logger import Logger
 
 parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-def dist(p1: list[3], p2: list[3]) -> float:
+def dist(p1: list, p2: list) -> float:
+    if len(p1) != 3 or len(p2) != 3:
+        raise ValueError('p1 and p2 must have 3 elements')
     sqr_x = (p2[0] - p1[0]) ** 2
     sqr_y = (p2[1] - p1[1]) ** 2
     sqr_z = (p2[2] - p1[2]) ** 2
     return sqr_x + sqr_y + sqr_z
 
-def MetadataCreatorThread(path, filenames, model, quick, dbaddr, dbport, dbfile):
+def MetadataCreatorThread(logger: Logger, path, filenames, model, quick):
     if len(filenames) < 1:
         return
 
     import cv2
     from tracker import Tracker, get_model_base_path
-
-    dbclient = pymongo.MongoClient(f"mongodb://{dbaddr}:{dbport}/")
-    dbflag = True
-    try:
-        dbclient.server_info()
-    except:
-        dbflag = False
-        print("Can't access MongoDB")
-
-    if dbflag:
-        dbfileparsed = os.path.basename(dbfile).split('.')
-        if len(dbfileparsed) == 3 and dbfileparsed[-1] == 'json':
-            database = dbclient[dbfileparsed[0]]
-            dbcollection = database[dbfileparsed[1]]
-        else:
-            dbflag = False
 
     sample_img = cv2.imread(path + filenames[0])
 
@@ -52,10 +40,8 @@ def MetadataCreatorThread(path, filenames, model, quick, dbaddr, dbport, dbfile)
             if img.shape[0] == 0 or img.shape[1] == 0:
                 continue
             height, width = img.shape[:2]
-            # tracker = Tracker(
-            #     width, height, max_threads=1, model_type=model, max_faces=1, try_hard=True, silent=True
-            # )
 
+            # reset tracker
             tracker.width = width
             tracker.height = height
             tracker.faces = []
@@ -65,16 +51,16 @@ def MetadataCreatorThread(path, filenames, model, quick, dbaddr, dbport, dbfile)
             faces = tracker.predict(img)
 
             if len(faces) < 1:
-                # print('-' * 100)
-                # print(f)
-                # print('-' * 100)
-                print('\033[91m' + f"{1000 * (time.perf_counter() - start_time):.2f}ms {i / total_len * 100:.2f}% {f}" + '\033[0m')
+                # faces not found
+                # print('\033[91m' + f"{1000 * (time.perf_counter() - start_time):.2f}ms {i / total_len * 100:.2f}% {f}" + '\033[0m')
+                logger.log_failure(time.perf_counter() - start_time, f)
                 continue
 
             face = faces[0]
 
             if face.euler[0] == 0 or face.euler[1] == 0 or face.euler[2] == 0 or float(dist(face.pts_3d[50], face.pts_3d[55])) >= 0.35 or float(dist(face.pts_3d[62], face.pts_3d[58])) >= 0.35:
-                print('\033[91m' + f"{1000 * (time.perf_counter() - start_time):.2f}ms {i / total_len * 100:.2f}% {f}" + '\033[0m')
+                # print('\033[91m' + f"{1000 * (time.perf_counter() - start_time):.2f}ms {i / total_len * 100:.2f}% {f}" + '\033[0m')
+                logger.log_failure(time.perf_counter() - start_time, f)
                 continue
 
             # center_x = face.bbox[1] + face.bbox[3] / 2
@@ -132,7 +118,7 @@ def MetadataCreatorThread(path, filenames, model, quick, dbaddr, dbport, dbfile)
             # result['pts_3d'] = face.pts_3d.tolist()
             result['crop'] = os.path.splitext(f)[0] + '_crop' + os.path.splitext(f)[1]
             # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])), float(dist(face.pts_3d[62], face.pts_3d[58])), *(face.quaternion.tolist())]
-            result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])) * 1, float(dist(face.pts_3d[62], face.pts_3d[58])) * 1, face.euler[0] * 1, face.euler[1] * 1, face.euler[2] * 1]
+            # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])) * 1, float(dist(face.pts_3d[62], face.pts_3d[58])) * 1, face.euler[0] * 1, face.euler[1] * 1, face.euler[2] * 1]
             # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])) * 1, float(dist(face.pts_3d[62], face.pts_3d[58])) * 1]
             # result['parameters'] = []
             # for p in face.pts_3d[48:].tolist():
@@ -140,40 +126,27 @@ def MetadataCreatorThread(path, filenames, model, quick, dbaddr, dbport, dbfile)
             #         result['parameters'].append(j)
             # result['parameters'] = [*face.euler]
             # result['parameters'] = [float(dist(face.pts_3d[50], face.pts_3d[55])), float(dist(face.pts_3d[62], face.pts_3d[58])), face.euler[0] * 10, face.euler[1] * 10, face.euler[2] * 10]
+
+            result['parameters'] = {
+                "points_3d": face.pts_3d.tolist(),
+                # "points": face.lms.tolist(),
+                "angles": face.euler,
+                "eye_blink": face.eye_blink,
+            }
+
             result_json = json.dumps(result)
             with open(path + os.path.splitext(f)[0] + '.json', 'w') as fout:
                 fout.write(result_json)
             cv2.imwrite(path + os.path.splitext(f)[0] + '_crop' + os.path.splitext(f)[1], crop_img)
-            if dbflag:
-                dbcollection.insert_one(result)
-            print('\033[92m' + f"{1000 * (time.perf_counter() - start_time):.2f}ms {i / total_len * 100:.2f}% {f}" + '\033[0m')
+            # print('\033[92m' + f"{1000 * (time.perf_counter() - start_time):.2f}ms {i / total_len * 100:.2f}% {f}" + '\033[0m')
+            logger.log_success(time.perf_counter() - start_time, f)
         except KeyboardInterrupt:
             break
         except Exception as e:
-            print(e)
-            print(f)
-            break
-
-def ExportDBToJson(dbaddr, dbport, file):
-    from bson.json_util import dumps
-
-    dbclient = pymongo.MongoClient(f"mongodb://{dbaddr}:{dbport}/")
-    try:
-        dbclient.server_info()
-    except:
-        print("Can't access MongoDB")
-        return
-
-    dbfileparsed = os.path.basename(file).split('.')
-    if len(dbfileparsed) == 3 and dbfileparsed[-1] == 'json':
-        database = dbclient[dbfileparsed[0]]
-        dbcollection = database[dbfileparsed[1]]
-
-    data = dbcollection.find().to_list()
-    for obj in data:
-        del obj['_id']
-    with open(file, 'w') as fout:
-        json.dump(json.loads(dumps(data)), fout)
+            # print(e)
+            # print(f)
+            logger.log_error(f, e)
+            # break
 
 def MetadataNormalizer(path):
     allowed_extensions = ['.json']
@@ -235,10 +208,10 @@ def deleteOldMetadata(path):
 
 def main():
     parser.add_argument("-i", "--input", help="Folder with input data to create metadata for", default="./Images/Frames/")
-    parser.add_argument("-db", "--database", help="JSON file with exported MongoDB", default="./Images/image_dataset.data.json")
-    parser.add_argument("--database-port", help="MongoDB port", default=27017)
-    parser.add_argument("--database-address", help="MongoDB address", default="localhost")
-    parser.add_argument("-E", "--export", help="Export MongoDB to JSON", action="store_true")
+    # parser.add_argument("-db", "--database", help="JSON file with exported MongoDB", default="./Images/image_dataset.data.json")
+    # parser.add_argument("--database-port", help="MongoDB port", default=27017)
+    # parser.add_argument("--database-address", help="MongoDB address", default="localhost")
+    # parser.add_argument("-E", "--export", help="Export MongoDB to JSON", action="store_true")
     parser.add_argument("-T", "--max-threads", help="Set the maximum number of threads", default=4, type=int)
     parser.add_argument("-m", "--model", help="Select the model used for face processing", default=3, type=int)
     parser.add_argument("-D", "--delete", help="Delete all metadata and associated files", action="store_true")
@@ -255,9 +228,6 @@ def main():
         exit(0)
     elif args.normalize:
         MetadataNormalizer(args.input)
-        exit(0)
-    elif args.export:
-        ExportDBToJson(args.database_address, args.database_port, args.database)
         exit(0)
 
     print("Scanning for existing crops")
@@ -300,31 +270,20 @@ def main():
                 files[0].append(elem)
     print(f"Found {len(folder_contents)} images")
 
-    # database preparations
-    print("Dropping MongoDB collection")
-    dbclient = pymongo.MongoClient(f"mongodb://{args.database_address}:{args.database_port}/")
-    dbflag = True
-    try:
-        dbclient.server_info()
-        dbfileparsed = os.path.basename(args.database).split('.')
-        if len(dbfileparsed) == 3 and dbfileparsed[-1] == 'json':
-            database = dbclient[dbfileparsed[0]]
-            database.drop_collection(dbfileparsed[1])
-        print("Dropped MongoDB collection")
-    except:
-        dbflag = False
-        print("Can't access MongoDB")
-
     # files = [[_] for _ in folder_contents]
 
-    input_data = [(args.input, files[_], args.model, args.quick, args.database_address, args.database_port, args.database) for _ in range(len(files))]
+    BaseManager.register('Logger', Logger)
+    manager = BaseManager()
+    manager.start()
+    logger = manager.Logger(args.input, len(folder_contents))
+
+    input_data = [(logger, args.input, files[_], args.model, args.quick) for _ in range(len(files))]
     print("Created input data for workers")
     print("Launching threads")
     start_time = time.perf_counter()
     process_pool = multiprocessing.Pool(min(args.max_threads, len(input_data)))
     process_pool.starmap(MetadataCreatorThread, input_data)
 
-    ExportDBToJson(args.database_address, args.database_port, args.database)
     print(f"Total duration: {time.perf_counter() - start_time:.2f}s")
 
 if __name__ == "__main__":

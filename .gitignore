@@ -160,3 +160,4 @@ cython_debug/
 #.idea/
 points.txt
 .idea
+tmp_metadata_cache.txt
